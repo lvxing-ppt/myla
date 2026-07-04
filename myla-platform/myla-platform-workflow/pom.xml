@@ -9,7 +9,8 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>myla-platform-workflow</artifactId>
-    <name>MYLA Platform Workflow</name>
+    <name>MYLA Platform Workflow (工作流引擎)</name>
+    <description>工作流规则引擎 — LabEventConsumer(MQ消费) + WorkflowEngineImpl(MVEL 条件求值 + correct_sir/create_alert/set_review_status 三种 Action) + CLSI 天然耐药规则</description>
 
     <dependencies>
         <dependency>

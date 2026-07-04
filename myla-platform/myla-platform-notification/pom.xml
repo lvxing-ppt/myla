@@ -9,7 +9,8 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>myla-platform-notification</artifactId>
-    <name>MYLA Platform Notification</name>
+    <name>MYLA Platform Notification (消息通知)</name>
+    <description>消息通知模块 — NotificationConsumer(MQ消费 notify.sms/notify.email) + NotificationServiceImpl(一期日志桩/二期对接短信SDK和JavaMailSender)</description>
 
     <dependencies>
         <dependency>

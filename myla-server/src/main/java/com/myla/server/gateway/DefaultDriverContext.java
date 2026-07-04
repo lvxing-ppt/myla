@@ -1,13 +1,18 @@
 package com.myla.server.gateway;
 
 import com.myla.gateway.core.context.DriverContext;
+import com.myla.gateway.devicemgmt.service.InstrumentMgmtService;
 import com.myla.result.entity.RawMessage;
 import com.myla.server.mapper.RawMessageMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -35,6 +40,8 @@ public class DefaultDriverContext implements DriverContext {
     private final String instrumentId;
     private final RabbitTemplate rabbitTemplate;
     private final RawMessageMapper rawMessageMapper;
+    private final InstrumentMgmtService instrumentMgmtService;
+    private final StringRedisTemplate redisTemplate;
 
     /** 仪器健康状态缓存：instrumentId -> status */
     private final Map<String, String> healthStatuses = new ConcurrentHashMap<>();
@@ -46,11 +53,15 @@ public class DefaultDriverContext implements DriverContext {
     private final Map<String, ScheduledFuture<?>> retryTasks = new ConcurrentHashMap<>();
 
     public DefaultDriverContext(String driverId, String instrumentId,
-                                RabbitTemplate rabbitTemplate, RawMessageMapper rawMessageMapper) {
+                                RabbitTemplate rabbitTemplate, RawMessageMapper rawMessageMapper,
+                                InstrumentMgmtService instrumentMgmtService,
+                                StringRedisTemplate redisTemplate) {
         this.driverId = driverId;
         this.instrumentId = instrumentId;
         this.rabbitTemplate = rabbitTemplate;
         this.rawMessageMapper = rawMessageMapper;
+        this.instrumentMgmtService = instrumentMgmtService;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -103,6 +114,12 @@ public class DefaultDriverContext implements DriverContext {
     @Override
     public void reportHealth(String instrumentId, String status, String message) {
         healthStatuses.put(instrumentId, status);
+        // 写入 instrument_registry 表，更新状态和最后心跳时间
+        try {
+            instrumentMgmtService.updateStatus(instrumentId, status, message);
+        } catch (Exception e) {
+            log.warn("[HEALTH] DB write failed for {}: {}", instrumentId, e.getMessage());
+        }
         log.info("[HEALTH] instrument={}, status={}, message={}", instrumentId, status, message);
     }
 
@@ -160,6 +177,43 @@ public class DefaultDriverContext implements DriverContext {
      */
     public Map<String, String> getHealthStatuses() {
         return Map.copyOf(healthStatuses);
+    }
+
+    // ==================== 幂等去重 ====================
+
+    private static final String DEDUP_PREFIX = "myla:dedup:";
+    private static final Duration DEDUP_TTL = Duration.ofHours(24);
+
+    @Override
+    public boolean isDuplicate(byte[] rawData) {
+        try {
+            String hash = sha256(rawData);
+            // 只检查不标记——标记在 markProcessed 中，确保处理成功后才写入
+            return Boolean.TRUE.equals(redisTemplate.hasKey(DEDUP_PREFIX + hash));
+        } catch (Exception e) {
+            // Redis 不可用时降级：允许所有数据通过，宁可重复入库也不丢数据
+            log.warn("[DEDUP] Redis unavailable, allowing data through: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public void markProcessed(byte[] rawData) {
+        try {
+            String hash = sha256(rawData);
+            redisTemplate.opsForValue().set(DEDUP_PREFIX + hash, "1", DEDUP_TTL);
+        } catch (Exception e) {
+            log.warn("[DEDUP] Failed to mark processed, may cause duplicate on retry: {}", e.getMessage());
+        }
+    }
+
+    private String sha256(byte[] data) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(data);
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            return Integer.toHexString(java.util.Arrays.hashCode(data));
+        }
     }
 
     /**

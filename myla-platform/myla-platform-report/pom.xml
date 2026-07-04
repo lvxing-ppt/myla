@@ -9,12 +9,13 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>myla-platform-report</artifactId>
-    <name>MYLA Platform Report</name>
+    <name>MYLA Platform Report (报告引擎)</name>
+    <description>检验报告生成 — ReportServiceImpl(Apache POI Excel/样本信息+菌种鉴定+药敏表格) + ReportController(生成/下载 REST API) + ReportTemplate/ReportSchedule 模板与调度实体</description>
 
     <dependencies>
         <dependency>
             <groupId>com.myla</groupId>
-            <artifactId>myla-common-api</artifactId>
+            <artifactId>myla-common</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

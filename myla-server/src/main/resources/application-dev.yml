@@ -38,7 +38,16 @@ myla:
         instrument-id: VITEK2-LAB1-001
         channel:
           type: TCP
-          port: 19001          # 网关在 19001 端口监听，等待 VITEK 2 仪器连接
+          port: 19001
+        splitter-type: ASTM
+        parser-type: vitek2-parser
+
+      # ========== 测试仪器 P2 ==========
+      - driver-id: vitek2-v1.0          # 复用 VITEK 2 驱动（同协议）
+        instrument-id: P2
+        channel:
+          type: TCP
+          port: 19002                  # 不同端口，互不干扰
         splitter-type: ASTM
         parser-type: vitek2-parser
   security:

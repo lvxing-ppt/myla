@@ -3,6 +3,7 @@ package com.myla.server;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * MyLA（Microbiology Laboratory Automation）系统 Spring Boot 主启动类。
@@ -24,6 +25,7 @@ import org.springframework.context.annotation.ComponentScan;
  */
 @SpringBootApplication
 @ComponentScan(basePackages = "com.myla")
+@EnableScheduling
 public class MylaApplication {
 
     /**

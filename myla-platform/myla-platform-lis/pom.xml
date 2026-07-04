@@ -9,9 +9,15 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>myla-platform-lis</artifactId>
-    <name>MYLA Platform LIS</name>
+    <name>MYLA Platform LIS (LIS 对接)</name>
+    <description>LIS/HIS 系统对接 — LisInboundService(二期入站医嘱接口) + OutboundMessageConsumer(MQ消费/重试3次/DLQ) + LisGatewayService(出站消息管理) + lis_config 字段映射配置表</description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>myla-platform-sample</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>

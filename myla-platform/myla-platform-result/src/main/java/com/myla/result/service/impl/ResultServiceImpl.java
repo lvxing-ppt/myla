@@ -6,11 +6,14 @@ import com.myla.common.api.dto.UnifiedResult;
 import com.myla.common.api.event.LabEvent;
 import com.myla.common.core.constant.ResultCode;
 import com.myla.common.core.exception.BusinessException;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.myla.result.entity.AstResult;
 import com.myla.result.entity.OrganismResult;
 import com.myla.result.mapper.AstResultMapper;
 import com.myla.result.mapper.OrganismResultMapper;
 import com.myla.result.service.ResultService;
+import com.myla.sample.entity.Sample;
+import com.myla.sample.mapper.SampleMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -47,6 +50,7 @@ public class ResultServiceImpl implements ResultService {
     private final OrganismResultMapper organismResultMapper;
     private final AstResultMapper astResultMapper;
     private final RabbitTemplate rabbitTemplate;
+    private final SampleMapper sampleMapper;
 
     /**
      * 保存仪器解析后的统一检验结果。
@@ -151,9 +155,15 @@ public class ResultServiceImpl implements ResultService {
      * @param barcode 样本条码
      * @return 样本数据库主键ID
      */
+    /**
+     * 根据条码查找样本 ID。
+     * 一期：查 sample 表按 barcode 匹配（手动登记或 LIS 入站的样本）。
+     * 二期：如果找不到，LisInboundService.receiveOrder() 自动创建。
+     */
     private Long findSampleIdByBarcode(String barcode) {
-        // In production, this would query the sample table via SampleMapper.
-        // For now, return 0L as a placeholder.
-        return 0L;
+        if (barcode == null || barcode.isBlank()) return null;
+        Sample sample = sampleMapper.selectOne(
+            new LambdaQueryWrapper<Sample>().eq(Sample::getBarcode, barcode));
+        return sample != null ? sample.getId() : null;
     }
 }

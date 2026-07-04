@@ -3,15 +3,19 @@ package com.myla.server.gateway;
 import com.myla.gateway.core.context.DriverConfig;
 import com.myla.gateway.core.hub.InstrumentHub;
 import com.myla.gateway.core.spi.InstrumentDriver;
+import com.myla.gateway.devicemgmt.service.InstrumentMgmtService;
 import com.myla.server.config.MylaProperties;
 import com.myla.server.config.MylaProperties.ChannelProperties;
 import com.myla.server.config.MylaProperties.InstrumentProperties;
-import com.myla.result.mapper.AstResultMapper;
-import com.myla.result.mapper.OrganismResultMapper;
 import com.myla.server.mapper.RawMessageMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.myla.gateway.devicemgmt.entity.InstrumentRegistry;
+import com.myla.gateway.devicemgmt.event.InstrumentRegisteredEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
 
@@ -53,10 +57,13 @@ public class GatewayBootstrap implements CommandLineRunner {
     private RawMessageMapper rawMessageMapper;
 
     @Autowired
-    private OrganismResultMapper organismResultMapper;
+    private ResultPersistenceService resultPersistenceService;
 
     @Autowired
-    private AstResultMapper astResultMapper;
+    private InstrumentMgmtService instrumentMgmtService;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     /** 所有已创建的 DataEventListener，key = instrumentId，供测试查询 */
     private final Map<String, LoggingDataEventListener> listeners = new ConcurrentHashMap<>();
@@ -70,27 +77,38 @@ public class GatewayBootstrap implements CommandLineRunner {
      */
     @Override
     public void run(String... args) {
-        if (properties.getGateway().getInstruments().isEmpty()) {
-            log.warn(">>> 没有配置任何仪器接入，网关处于空转状态。请在 application.yml 中 myla.gateway.instruments 下添加仪器配置。 <<<");
-            return;
-        }
+        int yamlCount = properties.getGateway().getInstruments().size();
 
-        log.info("══════════════════════════════════════════════");
-        log.info("  网关启动中，共配置 {} 台仪器", properties.getGateway().getInstruments().size());
-        log.info("══════════════════════════════════════════════");
-
-        for (InstrumentProperties cfg : properties.getGateway().getInstruments()) {
-            try {
-                bootInstrument(cfg);
-            } catch (Exception e) {
-                log.error("仪器 {} 启动失败: {}", cfg.getInstrumentId(), e.getMessage(), e);
+        // ====== 1. 加载 YAML 配置的仪器 ======
+        if (!properties.getGateway().getInstruments().isEmpty()) {
+            log.info("Loading {} instrument(s) from YAML config", yamlCount);
+            for (InstrumentProperties cfg : properties.getGateway().getInstruments()) {
+                try {
+                    bootInstrument(cfg);
+                } catch (Exception e) {
+                    log.error("YAML instrument {} failed: {}", cfg.getInstrumentId(), e.getMessage());
+                }
             }
         }
 
-        log.info("══════════════════════════════════════════════");
-        log.info("  网关启动完成。已启动 {}/{} 台仪器",
-                contexts.size(), properties.getGateway().getInstruments().size());
-        log.info("══════════════════════════════════════════════");
+        // ====== 2. 加载 DB 中动态注册的仪器 ======
+        var dbInstruments = instrumentMgmtService.listAll();
+        int dbLoaded = 0;
+        for (var reg : dbInstruments) {
+            if (reg.getChannelConfig() == null || reg.getChannelConfig().isBlank()) continue;
+            // 跳过 YAML 已加载的
+            if (contexts.containsKey(reg.getInstrumentId())) continue;
+
+            try {
+                bootInstrumentFromDb(reg);
+                dbLoaded++;
+            } catch (Exception e) {
+                log.error("DB instrument {} failed: {}", reg.getInstrumentId(), e.getMessage());
+            }
+        }
+
+        log.info("Gateway boot complete: {} YAML + {} DB = {} instrument(s)",
+                contexts.size() - dbLoaded, dbLoaded, contexts.size());
     }
 
     /**
@@ -100,20 +118,31 @@ public class GatewayBootstrap implements CommandLineRunner {
         String instrumentId = cfg.getInstrumentId();
         log.info("--- 正在加载仪器: {} (driver={}) ---", instrumentId, cfg.getDriverId());
 
-        // 1. 根据 driverId 创建驱动实例
+        // 1. 根据 driverId 创建驱动实例（SPI 自动发现）
         InstrumentDriver driver = createDriver(cfg.getDriverId());
 
-        // 2. 将 YAML 配置转换为核心层的 DriverConfig
+        // 2. 注册仪器到 instrument_registry 表
+        String manufacturer = "Unknown";
+        String model = "Unknown";
+        try {
+            var info = driver.getDiscoveryInfo();
+            manufacturer = info.getManufacturer() != null ? info.getManufacturer() : "Unknown";
+            model = info.getModel() != null ? info.getModel() : "Unknown";
+        } catch (Exception ignored) {}
+        instrumentMgmtService.register(instrumentId, cfg.getDriverId(), manufacturer, model);
+
+        // 3. 将 YAML 配置转换为核心层的 DriverConfig
         DriverConfig config = toDriverConfig(cfg);
 
-        // 3. 创建驱动上下文
+        // 4. 创建驱动上下文
         DefaultDriverContext context = new DefaultDriverContext(
-                cfg.getDriverId(), instrumentId, rabbitTemplate, rawMessageMapper);
+                cfg.getDriverId(), instrumentId, rabbitTemplate, rawMessageMapper,
+                instrumentMgmtService, redisTemplate);
         contexts.put(instrumentId, context);
 
         // 4. 创建数据事件监听器
         LoggingDataEventListener listener = new LoggingDataEventListener(
-                organismResultMapper, astResultMapper, rabbitTemplate);
+                resultPersistenceService);
         listeners.put(instrumentId, listener);
         driver.registerListener(listener);
 
@@ -124,17 +153,64 @@ public class GatewayBootstrap implements CommandLineRunner {
         log.info("--- 仪器 {} 已启动，监听端口 {} ---", instrumentId, cfg.getChannel().getPort());
     }
 
+    /** 从 DB 记录启动仪器（动态注册的仪器，重启后自动恢复） */
+    @SuppressWarnings("unchecked")
+    private void bootInstrumentFromDb(InstrumentRegistry reg) throws Exception {
+        String instrumentId = reg.getInstrumentId();
+        log.info("--- Loading DB instrument: {} (driver={}) ---", instrumentId, reg.getDriverId());
+
+        // 解析 channel_config JSON
+        var cfgMap = new ObjectMapper().readValue(reg.getChannelConfig(), java.util.Map.class);
+        int port = ((Number) cfgMap.getOrDefault("port", 0)).intValue();
+
+        // 构建 ChannelProperties
+        ChannelProperties ch = new ChannelProperties();
+        ch.setType((String) cfgMap.getOrDefault("type", "TCP"));
+        ch.setPort(port);
+
+        // 构建 InstrumentProperties
+        InstrumentProperties props = new InstrumentProperties();
+        props.setDriverId(reg.getDriverId());
+        props.setInstrumentId(instrumentId);
+        props.setChannel(ch);
+        props.setSplitterType((String) cfgMap.getOrDefault("splitterType", ""));
+        props.setParserType((String) cfgMap.getOrDefault("parserType", ""));
+
+        bootInstrument(props);
+    }
+
+    /** 监听仪器注册事件 — API 注册后热加载，无需重启 */
+    @EventListener
+    public void onInstrumentRegistered(InstrumentRegisteredEvent event) {
+        String instrumentId = event.getInstrumentId();
+        InstrumentRegistry reg = instrumentMgmtService.getByInstrumentId(instrumentId);
+        if (reg == null || reg.getChannelConfig() == null) {
+            log.warn("Cannot hot-load {}: not found or no channel_config", instrumentId);
+            return;
+        }
+        try {
+            bootInstrumentFromDb(reg);
+            log.info("Instrument {} hot-loaded successfully", instrumentId);
+        } catch (Exception e) {
+            log.error("Failed to hot-load instrument {}: {}", instrumentId, e.getMessage());
+        }
+    }
+
     /**
-     * 驱动工厂：根据 driverId 创建对应的 InstrumentDriver 实例。
-     * <p>后续可改为 Java SPI {@code ServiceLoader<InstrumentDriver>} 自动发现。</p>
+     * 驱动工厂：通过 Java SPI 自动发现所有 InstrumentDriver 实现。
+     * <p>新增仪器驱动只需：1. 实现 InstrumentDriver 2. 在 META-INF/services 注册 3. YAML 配置。
+     * 无需修改此处代码。</p>
      */
     private InstrumentDriver createDriver(String driverId) {
-        return switch (driverId) {
-            case "vitek2-v1.0" -> new com.myla.gateway.driver.vitek2.Vitek2Driver();
-            case "proprietary-v1.0" -> new com.myla.gateway.driver.proprietary.ProprietaryProtocolDriver();
-            default -> throw new IllegalArgumentException(
-                    "不支持的驱动类型: " + driverId + "。已支持的驱动: vitek2-v1.0, proprietary-v1.0");
-        };
+        var drivers = java.util.ServiceLoader.load(
+            com.myla.gateway.core.spi.InstrumentDriver.class);
+        for (var d : drivers) {
+            if (d.getDriverId().equals(driverId)) {
+                return d;
+            }
+        }
+        throw new IllegalArgumentException(
+                "未找到驱动: " + driverId + "。请确认 Driver 实现类在 classpath 中并已在 META-INF/services 注册。");
     }
 
     /**

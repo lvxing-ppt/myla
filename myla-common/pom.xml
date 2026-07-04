@@ -9,11 +9,30 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>myla-common</artifactId>
-    <packaging>pom</packaging>
     <name>MYLA Common</name>
-    <modules>
-        <module>myla-common-core</module>
-        <module>myla-common-api</module>
-        <module>myla-common-security</module>
-    </modules>
+    <description>公共模块 — BusinessException/ParseException 异常体系、ResultCode/R&lt;T&gt; 统一响应、UnifiedResult/AstResultDTO DTO、LabEvent 领域事件、枚举、JWT、@AuditLog 审计注解</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
 </project>

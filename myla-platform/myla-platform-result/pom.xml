@@ -9,9 +9,15 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>myla-platform-result</artifactId>
-    <name>MYLA Platform Result</name>
+    <name>MYLA Platform Result (结果管理)</name>
+    <description>检验结果管理 — ResultParsedConsumer(MQ消费) + ResultService(organism_result+ast_result 事务写入/barcode关联样本/审核状态机) + ResultController REST API</description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>myla-platform-sample</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>

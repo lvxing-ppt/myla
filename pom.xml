@@ -7,7 +7,8 @@
     <artifactId>myla</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>MYLA Platform</name>
+    <name>MYLA 微生物实验室自动化平台 (Root)</name>
+    <description>根 POM — Spring Boot 3.2 + JDK 17 + Maven 多模块，依赖版本统一管理</description>
     <modules>
         <module>myla-common</module>
         <module>myla-platform</module>
@@ -24,23 +25,12 @@
         <maven.compiler.target>17</maven.compiler.target>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.version>1.0</project.version>
     </properties>
     <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>com.myla</groupId>
-                <artifactId>myla-common-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.myla</groupId>
-                <artifactId>myla-common-api</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.myla</groupId>
-                <artifactId>myla-common-security</artifactId>
+                <artifactId>myla-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -1909,10 +1909,25 @@ Vitek2Parser 解析 ASTM 管式分隔 (`O|` / `R|`) 记录到 UnifiedResult。Vi
 - [ ] **Step 6: 工作流引擎** (LabEventConsumer, WorkflowRule matching)
 - [ ] **Step 7: LIS 网关** (OutboundMessageConsumer with DLQ retry)
 - [ ] **Step 8: 通知 + 审计 + JWT 认证**
+- [ ] **Step 9: 仪器状态监控**
+
+路径: `gateway-device-mgmt/.../InstrumentRegistry.java`, `InstrumentMgmtServiceImpl.java`, `InstrumentController.java`
+
+InstrumentRegistry 实体 + Mapper，启动时自动注册仪器到 DB。收到数据刷新 `lastSeenAt` 心跳（数据即心跳，不空轮询）。`@Scheduled(fixedDelay=120000)` 每 2 分钟扫描 ONLINE 仪器 → `lastSeenAt` 超时 → 自动标记 OFFLINE。REST API: `GET/PUT/DELETE /api/v1/instruments`。
+
+- [ ] **Step 10: 数据可靠性保障**
+
+路径: `AbstractInstrumentDriver.java`, `DefaultDriverContext.java`, `ResultPersistenceService.java`
+
+幂等去重：SHA-256 hash + Redis `hasKey` 检查 + `markProcessed` 成功后才写（Redis 不可用时降级放行）。ASTM ACK(0x06)/NAK(0x15) 应答通知仪器处理结果。`saveRawMessage` 提前到分桢前执行（防解析阶段原始数据丢失）。`ResultPersistenceService` @Transactional 双表事务写入 + afterCommit MQ 发布(3次重试) + 失败写 Redis outbox 集合 + `@Scheduled(fixedDelay=30000)` 定时补发。`AbstractInstrumentDriver` 模板方法抽取公共可靠性管道，新 Driver 只需传 Channel+Splitter+Parser 即可继承全部保障。
+
+- [ ] **Step 11: SPI 自动发现 + 模块合并**
+
+`ServiceLoader<InstrumentDriver>` 替代硬编码 switch，新仪器只需在 `META-INF/services` 注册一行。23 个 Maven 模块合并为 12 个（common 三合一 + gateway 六合一）。全部 POM 添加中文 `<description>`。
 
 所有业务模块创建完毕后编译验证。
 
-- [ ] **Step 9: 编译 + Commit**
+- [ ] **Step 12: 编译 + Commit**
 
 Run: `cd g:/myla && mvn compile -q && git add -A && git commit -m "feat: complete Phase 1 MVP - all platform modules"`
 

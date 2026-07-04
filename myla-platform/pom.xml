@@ -10,7 +10,8 @@
     </parent>
     <artifactId>myla-platform</artifactId>
     <packaging>pom</packaging>
-    <name>MYLA Platform</name>
+    <name>MYLA Platform (聚合)</name>
+    <description>业务模块聚合 — gateway(仪器网关) + sample(样本) + result(结果) + workflow(工作流) + lis(LIS对接) + report(报告) + notification(通知) + admin(管理)</description>
     <modules>
         <module>myla-platform-gateway</module>
         <module>myla-platform-sample</module>
@@ -25,11 +26,7 @@
         <dependencies>
             <dependency>
                 <groupId>com.myla</groupId>
-                <artifactId>myla-common-api</artifactId>
-            </dependency>
-            <dependency>
-                <groupId>com.myla</groupId>
-                <artifactId>myla-common-security</artifactId>
+                <artifactId>myla-common</artifactId>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -46,12 +43,7 @@
     <dependencies>
         <dependency>
             <groupId>com.myla</groupId>
-            <artifactId>myla-common-api</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.myla</groupId>
-            <artifactId>myla-common-security</artifactId>
+            <artifactId>myla-common</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
