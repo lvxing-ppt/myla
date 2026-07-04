@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.myla</groupId>
+        <artifactId>myla</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>myla-platform</artifactId>
+    <packaging>pom</packaging>
+    <name>MYLA Platform</name>
+    <modules>
+        <module>myla-platform-gateway</module>
+        <module>myla-platform-sample</module>
+        <module>myla-platform-result</module>
+        <module>myla-platform-workflow</module>
+        <module>myla-platform-lis</module>
+        <module>myla-platform-report</module>
+        <module>myla-platform-notification</module>
+        <module>myla-platform-admin</module>
+    </modules>
+</project>
