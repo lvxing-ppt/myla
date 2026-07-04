@@ -1,36 +1,29 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:myla;DB_CLOSE_DELAY=-1;MODE=MySQL
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+    url: jdbc:mysql://127.0.0.1:3306/myla?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
   sql:
     init:
       mode: never
   rabbitmq:
-    host: localhost
+    host: 127.0.0.1
     port: 5672
-    username: guest
-    password: guest
+    username: root
+    password: root
     publisher-confirm-type: correlated
     listener:
       simple:
         acknowledge-mode: manual
-        auto-startup: false
+        auto-startup: true
         retry:
           enabled: true
           max-attempts: 3
   redis:
-    host: localhost
+    host: 127.0.0.1
     port: 6379
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+    password: root
 
 logging:
   level:
@@ -39,6 +32,15 @@ logging:
 myla:
   gateway:
     driver-dir: ./drivers
+    instruments:
+      # ========== VITEK 2 仪器接入配置 (Demo) ==========
+      - driver-id: vitek2-v1.0
+        instrument-id: VITEK2-LAB1-001
+        channel:
+          type: TCP
+          port: 19001          # 网关在 19001 端口监听，等待 VITEK 2 仪器连接
+        splitter-type: ASTM
+        parser-type: vitek2-parser
   security:
     jwt-secret: dev-secret-key-do-not-use-in-production
     jwt-expiration: 7200

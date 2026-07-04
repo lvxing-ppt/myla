@@ -1,0 +1,719 @@
+@startuml
+
+' ============================================================
+'  MyLA 微生物实验室中间件平台 — 架构 UML
+'  包含: 模块结构、网关核心类图、工作流引擎、全链路时序图
+' ============================================================
+
+skinparam backgroundColor #FEFEFE
+skinparam monochrome false
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 12
+
+title MyLA 微生物实验室中间件平台 — 架构全景图 (v1.0)\n
+
+' ============================================================
+'  图 1: 项目模块结构 (Package Diagram)
+' ============================================================
+
+package "myla (Root POM)" as root #LightGray {
+
+  package "myla-common" as common #E8F5E9 {
+    package "myla-common-core" as common_core #C8E6C9 {
+      [BusinessException]
+      [ParseException]
+      [ResultCode]
+      [R<T>]
+      [GlobalExceptionHandler]
+    }
+    package "myla-common-api" as common_api #C8E6C9 {
+      [UnifiedResult]
+      [AstResultDTO]
+      [LabEvent]
+      [ResultType]
+      [SampleStatus]
+      [CommunicationMode]
+    }
+    package "myla-common-security" as common_sec #C8E6C9 {
+      [JwtTokenProvider]
+      [@AuditLog]
+    }
+  }
+
+  package "myla-platform" as platform #E3F2FD {
+
+    package "myla-platform-gateway" as gateway #BBDEFB {
+      package "gateway-core" as gw_core #90CAF9 {
+        [InstrumentHub] <<Component>>
+        [DriverContainer]
+        [InstrumentDriver] <<Interface>>
+        [CommunicationChannel] <<Interface>>
+        [FrameSplitter] <<Interface>>
+        [DataParser] <<Interface>>
+        [DataEventListener] <<Interface>>
+        [TelemetryListener] <<Interface>>
+        [DriverConfig]
+        [DriverContext] <<Interface>>
+      }
+      package "gateway-channel" as gw_chan #90CAF9 {
+        [TcpChannel]
+        [NettyTcpChannel]
+        [FileChannel]
+      }
+      package "gateway-splitter" as gw_split #90CAF9 {
+        [AstmSplitter]
+        [Hl7Splitter]
+      }
+      package "gateway-protocol" as gw_proto #90CAF9 {
+        [ProprietaryFrameCodec]
+        [FrameType]
+      }
+      package "gateway-drivers" as gw_drv #90CAF9 {
+        [Vitek2Driver]
+        [Vitek2Parser]
+        [ProprietaryProtocolDriver]
+      }
+    }
+
+    package "myla-platform-sample" as sample #BBDEFB {
+      [SampleController]
+      [SampleServiceImpl]
+      [Sample]
+      [SampleMapper]
+    }
+
+    package "myla-platform-result" as result #BBDEFB {
+      [ResultController]
+      [ResultServiceImpl]
+      [ResultParsedConsumer]
+      [OrganismResult]
+      [AstResult]
+      [RawMessage]
+    }
+
+    package "myla-platform-workflow" as workflow #FFF3E0 {
+      [LabEventConsumer]
+      [WorkflowEngineImpl]
+      [WorkflowRule]
+      [CriticalValueAlert]
+      [RuleExecutionContext]
+      [LabEventMessage]
+    }
+
+    package "myla-platform-lis" as lis #BBDEFB {
+      [LisGatewayServiceImpl]
+      [OutboundMessageConsumer]
+      [OutboundMessage]
+      [LisConfig]
+    }
+
+    package "myla-platform-report" as report #BBDEFB {
+      [ReportController]
+      [ReportServiceImpl]
+    }
+
+    package "myla-platform-notification" as notif #BBDEFB {
+      [NotificationConsumer]
+      [NotificationServiceImpl]
+    }
+
+    package "myla-platform-admin" as admin #BBDEFB {
+      [AuthController]
+      [UserService]
+    }
+  }
+
+  package "myla-server (Boot)" as server #FFF9C4 {
+    [MylaApplication]
+    [GatewayBootstrap]
+    [DefaultDriverContext]
+    [LoggingDataEventListener]
+    [RabbitMqConfig]
+    [MylaProperties]
+    [DevMessagingConfig]
+  }
+
+  package "myla-web (Vue 3)" as web #F3E5F5 {
+    [仪表盘]
+    [样本管理]
+    [结果审核]
+    [报告中心]
+    [系统管理]
+  }
+
+  package "myla-deploy" as deploy #ECEFF1 {
+    [Docker Compose]
+    [V1__init_schema.sql]
+  }
+}
+
+server --> common
+server --> gateway
+server --> sample
+server --> result
+server --> workflow
+server --> lis
+server --> report
+server --> notif
+server --> admin
+
+@enduml
+
+' ============================================================
+'  图 2: 网关核心层 — 类关系图
+' ============================================================
+
+@startuml
+
+title 网关核心层 — 驱动 & 通道 & 解析器 类关系图\n
+
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+' -------- SPI 接口层 --------
+interface InstrumentDriver {
+  + getDriverId(): String
+  + getDisplayName(): String
+  + getVersion(): String
+  + getMode(): CommunicationMode
+  + initialize(config: DriverConfig)
+  + start(ctx: DriverContext)
+  + stop()
+  + testConnection(): boolean
+  + registerListener(listener: DataEventListener)
+  + getDiscoveryInfo(): DiscoveryInfo
+  + executeCommand(cmd): CompletableFuture<CommandResult>
+  + registerTelemetryListener(listener)
+}
+
+interface CommunicationChannel {
+  + getChannelType(): String
+  + open(config: ChannelConfig)
+  + close()
+  + isOpen(): boolean
+  + send(data: byte[])
+  + setMessageListener(onMsg)
+  + setErrorListener(onErr)
+}
+
+interface FrameSplitter {
+  + getSplitterType(): String
+  + splitFrames(raw, incomplete): List<byte[]>
+}
+
+interface DataParser {
+  + getParserId(): String
+  + parse(frame: byte[]): List<UnifiedResult>
+}
+
+interface DataEventListener {
+  + onResultReceived(result: UnifiedResult)
+  + onParseFailed(rawText, error)
+  + onStatusChanged(status)
+  + onConnectionError(id, error, failures)
+}
+
+interface DriverContext {
+  + saveRawMessage(id, type, rawData)
+  + publishResult(rawData)
+  + reportHealth(id, status, msg)
+  + registerRetryScheduler(key, task, init, max)
+  + cancelRetryScheduler(key)
+  + sendAlert(id, type, msg)
+}
+
+' -------- 实现层 --------
+class Vitek2Driver {
+  - channel: TcpChannel
+  - splitter: AstmSplitter
+  - parser: Vitek2Parser
+  - config: DriverConfig
+  - ctx: DriverContext
+  - listener: DataEventListener
+  + start(ctx)
+  + stop()
+}
+InstrumentDriver <|.. Vitek2Driver
+
+class ProprietaryProtocolDriver {
+  - channel: CommunicationChannel
+  - objectMapper: ObjectMapper
+  + start(ctx)
+  + stop()
+}
+InstrumentDriver <|.. ProprietaryProtocolDriver
+
+class TcpChannel {
+  - serverSocket: ServerSocket
+  - socket: Socket
+  - in: InputStream
+  - out: OutputStream
+  - messageListener: Consumer<byte[]>
+  - errorListener: Consumer<ConnectionError>
+  - running: boolean
+  + open(config)
+  + close()
+}
+CommunicationChannel <|.. TcpChannel
+
+class NettyTcpChannel {
+  - messageListener: Consumer<byte[]>
+  - errorListener: Consumer<ConnectionError>
+  - activeConnections: AtomicInteger
+  + open(config)
+  + close()
+}
+CommunicationChannel <|.. NettyTcpChannel
+
+class FileChannel {
+  - scheduler: ScheduledExecutorService
+  - processed: Set<String>
+}
+CommunicationChannel <|.. FileChannel
+
+class AstmSplitter {
+  - STX: 0x02, ETX: 0x03, ETB: 0x17
+  + splitFrames(raw, incomplete): List<byte[]>
+}
+FrameSplitter <|.. AstmSplitter
+
+class Hl7Splitter {
+  - VT: 0x0B, FS: 0x1C, CR: 0x0D
+  + splitFrames(raw, incomplete): List<byte[]>
+}
+FrameSplitter <|.. Hl7Splitter
+
+class Vitek2Parser {
+  + parse(frame): List<UnifiedResult>
+}
+DataParser <|.. Vitek2Parser
+
+class LoggingDataEventListener {
+  - organismResultMapper
+  - astResultMapper
+  - rabbitTemplate
+  + onResultReceived(result)
+  + onParseFailed(rawText, error)
+  + onConnectionError(id, error, n)
+}
+DataEventListener <|.. LoggingDataEventListener
+
+class DefaultDriverContext {
+  - driverId: String
+  - instrumentId: String
+  - rabbitTemplate: RabbitTemplate
+  - rawMessageMapper: RawMessageMapper
+  - healthStatuses: Map
+  - scheduler: ScheduledExecutorService
+  + saveRawMessage(id, type, data)
+  + publishResult(data)
+  + reportHealth(id, status, msg)
+  + sendAlert(id, type, msg)
+}
+DriverContext <|.. DefaultDriverContext
+
+' -------- Hub 管理层 --------
+class InstrumentHub {
+  - containers: Map<String, DriverContainer>
+  - drivers: Map<String, InstrumentDriver>
+  + loadDriver(driver, config, context)
+  + startDriver(instrumentId)
+  + stopDriver(instrumentId)
+  + unloadDriver(instrumentId)
+  + listInstruments(): List
+  + getAllStatuses(): Map
+}
+InstrumentHub "1" o-- "*" DriverContainer
+
+class DriverContainer {
+  - driver: InstrumentDriver
+  - config: DriverConfig
+  - context: DriverContext
+  - running: AtomicBoolean
+  - currentStatus: InstrumentStatus
+  + start()
+  + stop()
+}
+DriverContainer o-- InstrumentDriver
+DriverContainer o-- DriverConfig
+DriverContainer o-- DriverContext
+
+class DriverConfig {
+  + driverId: String
+  + instrumentId: String
+  + channel: ChannelConfig
+  + splitterType: String
+  + parserType: String
+  + properties: Map
+}
+
+class GatewayBootstrap {
+  - hub: InstrumentHub
+  - properties: MylaProperties
+  - rabbitTemplate: RabbitTemplate
+  - rawMessageMapper
+  - organismResultMapper
+  - astResultMapper
+  + run(args...)
+  - bootInstrument(cfg)
+}
+GatewayBootstrap --> InstrumentHub
+GatewayBootstrap --> MylaProperties
+
+' -------- 组合关系 --------
+Vitek2Driver *-- TcpChannel
+Vitek2Driver *-- AstmSplitter
+Vitek2Driver *-- Vitek2Parser
+
+@enduml
+
+' ============================================================
+'  图 3: 工作流引擎 — 类关系图
+' ============================================================
+
+@startuml
+
+title 工作流规则引擎 — 类关系图\n
+
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+' -------- 引擎核心 --------
+interface WorkflowEngine {
+  + executeRule(rule: WorkflowRule, context: Object)
+  + createCriticalAlert(alert): CriticalValueAlert
+}
+
+class WorkflowEngineImpl {
+  - ruleMapper: WorkflowRuleMapper
+  - alertMapper: CriticalValueAlertMapper
+  - organismResultMapper
+  - astResultMapper
+  + executeRule(rule, context)
+  + createCriticalAlert(alert)
+  - executeAction(action, orgResult, astResults)
+  - executeCorrectSir(action, astResults)
+  - executeCreateAlert(action, orgResult)
+  - executeSetReviewStatus(action, orgResult)
+  - isTruthy(result): boolean
+}
+WorkflowEngine <|.. WorkflowEngineImpl
+
+' -------- 消费者 --------
+class LabEventConsumer {
+  - ruleMapper: WorkflowRuleMapper
+  - workflowEngine: WorkflowEngine
+  + onLabEvent(msg: LabEventMessage)
+}
+LabEventConsumer --> WorkflowEngine
+LabEventConsumer --> WorkflowRuleMapper
+
+' -------- 数据模型 --------
+class WorkflowRule {
+  + id: Long
+  + ruleId: String
+  + name: String
+  + triggerEvent: String
+  + conditionExpr: String
+  + actions: String (JSON)
+  + priority: Integer
+  + enabled: Integer
+}
+LabEventConsumer --> WorkflowRule : 查询匹配规则
+
+class RuleExecutionContext {
+  + triggerEvent: String
+  + organismResultId: Long
+  + variables: Map<String, Object>
+}
+WorkflowEngineImpl --> RuleExecutionContext : 使用上下文
+
+class LabEventMessage {
+  + event: String
+  + organismResultId: Long
+}
+LabEventConsumer --> LabEventMessage : RabbitMQ 消费
+
+class CriticalValueAlert {
+  + id: Long
+  + organismResultId: Long
+  + organismName: String
+  + alertReason: String
+  + alertLevel: String (CRITICAL/HIGH)
+  + notifyMethods: String
+  + notifyStatus: String (PENDING/SENT/CONFIRMED)
+  + escalateCount: Integer
+}
+WorkflowEngineImpl --> CriticalValueAlert : 创建告警
+
+' -------- 依赖结果模块 --------
+class OrganismResult {
+  + id: Long
+  + resultId: String
+  + organismName: String
+  + organismCode: String
+  + identificationPercent: BigDecimal
+  + reviewStatus: String
+}
+
+class AstResult {
+  + id: Long
+  + organismResultId: Long
+  + antibioticName: String
+  + micValue: BigDecimal
+  + machineSir: String
+  + finalSir: String
+  + expertRuleComment: String
+  + isCorrected: Integer
+}
+WorkflowEngineImpl --> OrganismResult : 加载
+WorkflowEngineImpl --> AstResult : 加载 + 修正
+
+' -------- MVEL 引擎 --------
+package "MVEL 表达式引擎" #FFF3E0 {
+  [MVEL.compileExpression()]
+  [MVEL.executeExpression()]
+}
+WorkflowEngineImpl ..> [MVEL.compileExpression()] : 编译 conditionExpr
+WorkflowEngineImpl ..> [MVEL.executeExpression()] : 求值
+
+note right of WorkflowEngineImpl
+  <b>3 种 Action 类型:</b>
+  1. correct_sir → AST SIR 修正
+  2. create_alert → 危急值告警
+  3. set_review_status → 审核状态回退
+
+  <b>MVEL 条件示例:</b>
+  organismName contains "Enterococcus"
+  organismName contains "Klebsiella"
+  organismName contains "Staphylococcus aureus"
+end note
+
+@enduml
+
+' ============================================================
+'  图 4: 全链路时序图 — 仪器数据 → 报告
+' ============================================================
+
+@startuml
+
+title MyLA 全链路时序图 — VITEK 2 仪器数据 → 规则引擎 → 报告\n
+
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+actor "VITEK 2\n仪器" as instrument
+participant "TcpChannel\n:19001" as tcp
+participant "Vitek2Driver" as driver
+participant "AstmSplitter" as splitter
+participant "Vitek2Parser" as parser
+participant "LoggingData-\nEventListener" as listener
+database "MySQL\n(raw+org+ast)" as db
+participant "RabbitMQ\n(myla.workflow\n/lab.event)" as mq
+participant "LabEvent-\nConsumer" as consumer
+participant "WorkflowEngineImpl\n(MVEL 求值)" as engine
+database "MySQL\n(workflow_rule\n+critical_alert)" as db_wf
+actor "检验技师" as reviewer
+
+== 阶段 1: TCP 接收 & 分桢 ==
+
+instrument -> tcp : TCP connect :19001
+tcp -> tcp : serverSocket.accept()
+instrument -> tcp : send ASTM bytes\n[STX]O|1|20240001...\\r\nR|1||ORGANISM|E.coli|99.5\\r\nR|2||AST|AMP|2.0|S\\r[ETX]
+tcp -> driver : messageListener.accept(rawBytes)
+
+driver -> db : ctx.saveRawMessage("ASTM", rawBytes)\nINSERT INTO raw_message
+activate db
+db --> driver : id=1
+deactivate db
+
+driver -> splitter : splitFrames(rawBytes, incompleteFrames)
+activate splitter
+splitter -> splitter : STX/ETX 状态机切帧
+splitter --> driver : List<byte[]> frames (1 帧)
+deactivate splitter
+
+== 阶段 2: ASTM 解析 & 持久化 ==
+
+driver -> parser : parse(frame)
+activate parser
+parser -> parser : 按 \\r 分割记录行\n识别 O| (Order) 和 R| (Result)
+parser --> driver : List<UnifiedResult>
+deactivate parser
+
+driver -> listener : onResultReceived(result)
+activate listener
+
+listener -> db : INSERT INTO organism_result\n(id, organism_name, identification_percent, ...)
+activate db
+db --> listener : id=16 (Enterococcus faecium)
+deactivate db
+
+loop 每个药敏结果
+  listener -> db : INSERT INTO ast_result\n(organism_result_id, antibiotic_name, mic_value, machine_sir, final_sir)
+  activate db
+  db --> listener : id=N
+  deactivate db
+end
+
+listener -> mq : publish LabEventMessage\n("AST_RESULT_RECEIVED", orgResultId=16)
+activate mq
+mq --> listener : ACK
+deactivate mq
+
+listener --> driver :
+deactivate listener
+driver -> driver : 下一轮 read() 等待
+
+== 阶段 3: 工作流规则引擎 ==
+
+mq -> consumer : onLabEvent(msg)
+activate consumer
+
+consumer -> db_wf : SELECT * FROM workflow_rule\nWHERE trigger_event='AST_RESULT_RECEIVED'\nAND enabled=1 ORDER BY priority DESC
+activate db_wf
+db_wf --> consumer : [CLSI-2A-007(P=200), CLSI-2A-008(P=200),\n CLSI-2A-001(P=100), ...共8条]
+deactivate db_wf
+
+consumer -> engine : executeRule(rule, ctx)\n(ctx.organismResultId=16)
+
+activate engine
+engine -> db : SELECT * FROM organism_result WHERE id=16
+activate db
+db --> engine : organismName="Enterococcus faecium"
+deactivate db
+
+engine -> db : SELECT * FROM ast_result\nWHERE organism_result_id=16
+activate db
+db --> engine : [Ceftriaxone(S), Clindamycin(S), Vancomycin(R)]
+deactivate db
+
+engine -> engine : MVEL.compile(conditionExpr)\nMVEL.executeExpression(vars)\n\n例: organismName contains "Enterococcus"\n→ true ✅
+
+alt 条件满足
+
+  engine -> engine : parseActions(JSON)\n[{"type":"correct_sir","antibiotics":[...],"to_sir":"R",...}]
+
+  alt action=correct_sir
+    engine -> db : UPDATE ast_result\nSET final_sir='R', is_corrected=1,\nexpert_rule_comment='肠球菌属对头孢菌素类天然耐药...'\nWHERE antibiotic_name='Ceftriaxone'
+    activate db
+    db --> engine : 1 row updated
+    deactivate db
+    note right: Ceftriaxone machine_sir=S\n→ final_sir=R ✅
+  end
+
+  alt action=create_alert
+    engine -> db : INSERT INTO critical_value_alert\n(organism_name, alert_level='CRITICAL',\nalert_reason='需确认VRE...')
+    activate db
+    db --> engine : alert id=1
+    deactivate db
+    note right: VRE 危急值告警已创建 ⚠
+  end
+
+end
+
+engine --> consumer :
+deactivate engine
+consumer --> mq : ACK
+deactivate consumer
+
+== 阶段 4: 人工审核 ==
+
+reviewer -> listener : PUT /api/v1/results/16/review\n{"action":"APPROVE","reviewer":"李医师"}
+listener -> db : UPDATE organism_result\nSET review_status='APPROVED',\nreviewed_by='李医师'
+activate db
+db --> listener : OK
+deactivate db
+listener --> reviewer : {"code":200}
+
+== 阶段 5: 报告导出 ==
+
+reviewer -> listener : POST /api/v1/reports/sample/{barcode}/generate
+listener -> db : SELECT organism_result, ast_result
+activate db
+db --> listener : result data
+deactivate db
+listener -> listener : Apache POI 构建 Excel\n(样本信息 + 菌种鉴定 + 药敏表格)
+listener --> reviewer : 检验报告.xlsx ✅
+
+@enduml
+
+' ============================================================
+'  图 5: 模块间 MQ 消息流 (组件图)
+' ============================================================
+
+@startuml
+
+title MyLA 消息管道 — RabbitMQ 拓扑\n
+
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+left to right direction
+
+actor "仪器群" as instruments
+actor "检验技师" as tech
+
+rectangle "myla.instrument\nTopic Exchange" as ex_inst #E3F2FD
+rectangle "myla.workflow\nTopic Exchange" as ex_wf #FFF3E0
+rectangle "myla.lis\nTopic Exchange" as ex_lis #E8F5E9
+rectangle "myla.notification\nTopic Exchange" as ex_notif #FCE4EC
+rectangle "myla.report\nTopic Exchange" as ex_rpt #F3E5F5
+rectangle "myla.system\nTopic Exchange" as ex_sys #ECEFF1
+
+queue "raw.message" as q_raw #BBDEFB
+queue "result.parsed" as q_parsed #BBDEFB
+queue "instrument.telemetry" as q_tele #BBDEFB
+
+queue "lab.event" as q_event #FFE0B2
+
+queue "outbound.msg\n(DLQ→outbound.dlq)" as q_out #C8E6C9
+queue "outbound.dlq" as q_dlq #FFCDD2
+
+queue "notify.sms" as q_sms #F8BBD0
+queue "notify.email" as q_email #F8BBD0
+
+queue "report.gen" as q_report #E1BEE7
+
+queue "audit.write" as q_audit #CFD8DC
+
+ex_inst --> q_raw : "raw.message"
+ex_inst --> q_parsed : "result.parsed"
+ex_inst --> q_tele : "instrument.telemetry"
+
+ex_wf --> q_event : "lab.event"
+
+ex_lis --> q_out : "outbound.msg"
+ex_lis --> q_dlq : "outbound.dlq"
+
+ex_notif --> q_sms : "notify.sms"
+ex_notif --> q_email : "notify.email"
+
+ex_rpt --> q_report : "report.gen"
+
+ex_sys --> q_audit : "audit.write"
+
+instruments --> ex_inst : 原始报文\n解析结果\n遥测数据
+tech --> ex_wf : 审核事件
+tech --> ex_rpt : 报告请求
+tech --> ex_lis : LIS 发送
+
+q_parsed --> [ResultParsedConsumer] : 消费入库
+q_event --> [LabEventConsumer] : 规则引擎
+q_out --> [OutboundMessage-\nConsumer] : LIS 发送
+q_sms --> [Notification-\nConsumer] : 短信
+q_email --> [Notification-\nConsumer] : 邮件
+q_report --> [ReportService] : 报告生成
+q_audit --> [AuditService] : 异步写库
+
+note bottom of ex_lis
+  <b>死信队列机制:</b>
+  outbound.msg 消费失败 3 次
+  → 自动路由到 outbound.dlq
+  → 管理界面人工重发
+end note
+
+@enduml

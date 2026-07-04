@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(npm --version)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(timeout 30 C:/Users/Administrator/.m2/wrapper/dists/apache-maven-3.9.7-bin/c1976043/apache-maven-3.9.7/bin/mvn spring-boot:run -pl myla-server --no-transfer-progress)",
+      "Bash(timeout 15 C:/Users/Administrator/.m2/wrapper/dists/apache-maven-3.9.7-bin/c1976043/apache-maven-3.9.7/bin/mvn spring-boot:run -pl myla-server --no-transfer-progress)",
+      "Bash(mysql -u root -proot -h 127.0.0.1 -e \"CREATE DATABASE IF NOT EXISTS myla DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS 'myla'@'%' IDENTIFIED BY 'myla'; GRANT ALL PRIVILEGES ON myla.* TO 'myla'@'%'; FLUSH PRIVILEGES; SELECT 'OK - User myla created, database myla ready' AS result;\")",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(timeout 12 C:/Users/Administrator/.m2/wrapper/dists/apache-maven-3.9.7-bin/c1976043/apache-maven-3.9.7/bin/mvn spring-boot:run -pl myla-server --no-transfer-progress)",
+      "Bash(C:/Users/Administrator/.m2/wrapper/dists/apache-maven-3.9.7-bin/c1976043/apache-maven-3.9.7/bin/mvn spring-boot:run -pl myla-server --no-transfer-progress)",
+      "Bash(awk '{print $NF}')"
     ]
   }
 }

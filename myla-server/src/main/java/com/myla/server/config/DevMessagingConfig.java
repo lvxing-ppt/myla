@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Profile;
  * 确保应用在本地开发环境（无 Docker）下能够正常启动。
  */
 @Configuration
-@Profile("dev")
+@Profile("dev-mock")
 public class DevMessagingConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DevMessagingConfig.class);

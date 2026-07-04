@@ -72,18 +72,27 @@ public class AstmSplitter implements FrameSplitter {
     public List<byte[]> splitFrames(byte[] raw, List<byte[]> incomplete) {
         List<byte[]> frames = new ArrayList<>();
 
-        // 先处理上次的残留帧
+        // 将上次残留帧与本次新数据拼接，统一走状态机处理
+        byte[] combined = raw;
         if (incomplete != null && !incomplete.isEmpty()) {
+            int totalLen = raw.length;
             for (byte[] frag : incomplete) {
-                frames.add(frag);
+                totalLen += frag.length;
             }
+            combined = new byte[totalLen];
+            int pos = 0;
+            for (byte[] frag : incomplete) {
+                System.arraycopy(frag, 0, combined, pos, frag.length);
+                pos += frag.length;
+            }
+            System.arraycopy(raw, 0, combined, pos, raw.length);
             incomplete.clear();
         }
 
         List<Byte> cur = new ArrayList<>();  // 当前帧缓冲区
         boolean in = false;                   // 是否处于帧内部（遇到 STX 后、ETX/ETB 前）
 
-        for (byte b : raw) {
+        for (byte b : combined) {
             // 遇到 STX：开始新帧
             if (b == STX) {
                 // 如果之前已在帧内但遇到了新的 STX，说明上一帧不完整，保存为残留

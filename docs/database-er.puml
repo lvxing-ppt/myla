@@ -1,0 +1,467 @@
+@startuml
+
+' ============================================================
+'  MyLA 数据库 ER 图 — 22 张表, 分 8 个业务域
+' ============================================================
+
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+title MyLA 微生物实验室中间件 — 数据库实体关系图 (22 Tables)\n
+
+left to right direction
+
+' ============================================================
+'  域 1: 字典/码表 (4 表, 独立静态数据)
+' ============================================================
+
+entity "hospital\n院区" as hospital #E8F5E9 {
+  * id : BIGINT <<PK>>
+  --
+  * hospital_code : VARCHAR(32) <<UQ>>
+  hospital_name : VARCHAR(128)
+  address : VARCHAR(256)
+  contact_phone : VARCHAR(32)
+  enabled : TINYINT(1)
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "organism_dict\n菌种字典" as org_dict #E8F5E9 {
+  * id : BIGINT <<PK>>
+  --
+  * organism_code : VARCHAR(16) <<UQ>>
+  organism_name : VARCHAR(128)
+  whonet_code : VARCHAR(16)
+  snomed_code : VARCHAR(16)
+  gram_stain : VARCHAR(8)
+  category : VARCHAR(32)
+  is_multidrug_candidate : TINYINT
+  enabled : TINYINT(1)
+  created_at : DATETIME
+}
+
+entity "antibiotic_dict\n抗生素字典" as abx_dict #E8F5E9 {
+  * id : BIGINT <<PK>>
+  --
+  * antibiotic_code : VARCHAR(16) <<UQ>>
+  antibiotic_name : VARCHAR(64)
+  whonet_code : VARCHAR(16)
+  antibiotic_class : VARCHAR(32)
+  enabled : TINYINT(1)
+  created_at : DATETIME
+}
+
+entity "specimen_dict\n标本类型字典" as spec_dict #E8F5E9 {
+  * id : BIGINT <<PK>>
+  --
+  * specimen_code : VARCHAR(16) <<UQ>>
+  specimen_name : VARCHAR(64)
+  is_sterile_site : TINYINT
+  enabled : TINYINT(1)
+  created_at : DATETIME
+}
+
+' ============================================================
+'  域 2: RBAC 权限 (5 表)
+' ============================================================
+
+entity "sys_user\n系统用户" as sys_user #E3F2FD {
+  * id : BIGINT <<PK>>
+  --
+  * username : VARCHAR(64) <<UQ>>
+  password_hash : VARCHAR(256)
+  real_name : VARCHAR(64)
+  mobile : VARCHAR(20)
+  email : VARCHAR(128)
+  status : VARCHAR(20)
+  hospital_id : BIGINT <<FK>>
+  last_login_at : DATETIME
+  created_at : DATETIME
+  updated_at : DATETIME
+  deleted : TINYINT
+}
+
+entity "sys_role\n角色" as sys_role #E3F2FD {
+  * id : BIGINT <<PK>>
+  --
+  * role_code : VARCHAR(32) <<UQ>>
+  role_name : VARCHAR(64)
+  hospital_id : BIGINT <<FK>>
+  description : VARCHAR(256)
+  enabled : TINYINT(1)
+  created_at : DATETIME
+}
+
+entity "sys_permission\n权限" as sys_perm #E3F2FD {
+  * id : BIGINT <<PK>>
+  --
+  * perm_code : VARCHAR(64) <<UQ>>
+  perm_name : VARCHAR(64)
+  resource : VARCHAR(64)
+  action : VARCHAR(32)
+  created_at : DATETIME
+}
+
+entity "sys_user_role\n用户-角色" as user_role #BBDEFB {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * role_id : BIGINT <<FK>>
+  ==
+  <<UK>> (user_id, role_id)
+}
+
+entity "sys_role_permission\n角色-权限" as role_perm #BBDEFB {
+  * id : BIGINT <<PK>>
+  --
+  * role_id : BIGINT <<FK>>
+  * perm_id : BIGINT <<FK>>
+  ==
+  <<UK>> (role_id, perm_id)
+}
+
+sys_user ||--o{ user_role
+sys_role ||--o{ user_role
+sys_role ||--o{ role_perm
+sys_perm ||--o{ role_perm
+sys_user }o--|| hospital
+
+' ============================================================
+'  域 3: 样本管理 (3 表) — 核心业务域
+' ============================================================
+
+entity "sample\n样本" as sample #FFF9C4 {
+  * id : BIGINT <<PK>>
+  --
+  * sample_id : VARCHAR(32) <<UQ>>
+  barcode : VARCHAR(64) <<IDX>>
+  patient_id : VARCHAR(32) <<IDX>>
+  patient_name : VARCHAR(64)
+  gender : VARCHAR(4)
+  age : INT
+  specimen_type : VARCHAR(32)
+  collect_time : DATETIME
+  receive_time : DATETIME <<IDX>>
+  status : VARCHAR(20) <<IDX>>
+  priority : VARCHAR(10)
+  ward_code : VARCHAR(32)
+  ward_name : VARCHAR(64)
+  diagnosis : VARCHAR(256)
+  source_system : VARCHAR(32)
+  comment : TEXT
+  created_at : DATETIME <<IDX>>
+  updated_at : DATETIME
+  deleted : TINYINT
+}
+
+entity "sample_test\n样本检验明细" as sample_test #FFF9C4 {
+  * id : BIGINT <<PK>>
+  --
+  * sample_id : BIGINT <<FK,IDX>>
+  test_code : VARCHAR(32)
+  test_name : VARCHAR(64)
+  instrument_id : VARCHAR(32) <<IDX>>
+  status : VARCHAR(20)
+  started_at : DATETIME
+  completed_at : DATETIME
+  created_at : DATETIME
+}
+
+entity "sample_tracking\n样本流转日志" as sample_track #FFF9C4 {
+  * id : BIGINT <<PK>>
+  --
+  * sample_id : BIGINT <<FK,IDX>>
+  from_status : VARCHAR(20)
+  to_status : VARCHAR(20)
+  operator : VARCHAR(64)
+  comment : VARCHAR(256)
+  created_at : DATETIME <<IDX>>
+}
+
+sample ||--o{ sample_test
+sample ||--o{ sample_track
+
+' ============================================================
+'  域 4: 检验结果 (3 表) — 核心业务域
+' ============================================================
+
+entity "organism_result\n菌种鉴定结果" as org_result #FFE0B2 {
+  * id : BIGINT <<PK>>
+  --
+  * result_id : VARCHAR(32) <<UQ,IDX>>
+  sample_id : BIGINT <<FK,IDX>>
+  instrument_id : VARCHAR(32)
+  organism_code : VARCHAR(16) <<IDX>>
+  organism_name : VARCHAR(128)
+  identification_percent : DECIMAL(5,2)
+  result_type : VARCHAR(20)
+  test_time : DATETIME
+  review_status : VARCHAR(20) <<IDX>>
+  reviewed_by : VARCHAR(64)
+  reviewed_at : DATETIME
+  raw_message : TEXT
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "ast_result\n药敏结果" as ast_result #FFE0B2 {
+  * id : BIGINT <<PK>>
+  --
+  * organism_result_id : BIGINT <<FK,IDX>>
+  antibiotic_code : VARCHAR(16) <<IDX>>
+  antibiotic_name : VARCHAR(64)
+  mic_value : DECIMAL(10,4)
+  mic_unit : VARCHAR(8)
+  machine_sir : VARCHAR(4)
+  manual_sir : VARCHAR(4)
+  final_sir : VARCHAR(4)
+  expert_rule_comment : VARCHAR(256)
+  is_corrected : TINYINT
+  corrected_by : VARCHAR(64)
+  corrected_at : DATETIME
+  created_at : DATETIME
+}
+
+entity "raw_message\n原始报文存档" as raw_msg #FFE0B2 {
+  * id : BIGINT <<PK>>
+  --
+  instrument_id : VARCHAR(32) <<IDX>>
+  message_direction : VARCHAR(10)
+  message_type : VARCHAR(20)
+  raw_content : TEXT
+  parse_status : VARCHAR(20) <<IDX>>
+  parse_error : TEXT
+  received_at : DATETIME <<IDX>>
+}
+
+sample ||--o{ org_result
+org_result ||--o{ ast_result
+
+' ============================================================
+'  域 5: 工作流 & 危急值 (2 表)
+' ============================================================
+
+entity "workflow_rule\n工作流规则" as wf_rule #FFF3E0 {
+  * id : BIGINT <<PK>>
+  --
+  * rule_id : VARCHAR(32) <<UQ>>
+  name : VARCHAR(128)
+  trigger_event : VARCHAR(64)
+  condition_expr : VARCHAR(512)
+  actions : JSON
+  priority : INT
+  enabled : TINYINT(1)
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "critical_value_alert\n危急值告警" as crit_alert #FFCDD2 {
+  * id : BIGINT <<PK>>
+  --
+  * organism_result_id : BIGINT <<FK,IDX>>
+  organism_name : VARCHAR(128)
+  alert_reason : VARCHAR(64)
+  alert_level : VARCHAR(10)
+  notify_methods : VARCHAR(128)
+  notify_targets : TEXT
+  notify_status : VARCHAR(20) <<IDX>>
+  confirm_time : DATETIME
+  confirm_by : VARCHAR(64)
+  escalate_count : INT
+  created_at : DATETIME
+}
+
+org_result ||--o{ crit_alert
+
+' ============================================================
+'  域 6: LIS 通信 (2 表)
+' ============================================================
+
+entity "lis_config\nLIS配置" as lis_config #E8F5E9 {
+  * id : BIGINT <<PK>>
+  --
+  * hospital_code : VARCHAR(32) <<UQ>>
+  channel_type : VARCHAR(32)
+  channel_config : JSON
+  order_mapping : JSON
+  test_code_map : JSON
+  result_mapping : JSON
+  organism_code_map : JSON
+  antibiotic_code_map : JSON
+  retry_policy : JSON
+  ack_timeout_sec : INT
+  enabled : TINYINT(1)
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "outbound_message\nLIS外发消息" as out_msg #E8F5E9 {
+  * id : BIGINT <<PK>>
+  --
+  * message_id : VARCHAR(64) <<UQ>>
+  hospital_code : VARCHAR(32) <<IDX>>
+  message_type : VARCHAR(20)
+  message_content : TEXT
+  send_status : VARCHAR(20) <<IDX>>
+  retry_count : INT
+  max_retries : INT
+  last_error : TEXT
+  next_retry_at : DATETIME <<IDX>>
+  sent_at : DATETIME
+  created_at : DATETIME
+}
+
+' ============================================================
+'  域 7: 报告 (2 表)
+' ============================================================
+
+entity "report_template\n报告模板" as rpt_tmpl #F3E5F5 {
+  * id : BIGINT <<PK>>
+  --
+  * template_code : VARCHAR(32) <<UQ>>
+  template_name : VARCHAR(64)
+  template_type : VARCHAR(20)
+  template_path : VARCHAR(256)
+  output_format : VARCHAR(20)
+  parameters : JSON
+  enabled : TINYINT(1)
+  created_at : DATETIME
+}
+
+entity "report_schedule\n定时报告" as rpt_sched #F3E5F5 {
+  * id : BIGINT <<PK>>
+  --
+  schedule_name : VARCHAR(64)
+  template_code : VARCHAR(32) <<FK>>
+  cron_expr : VARCHAR(32)
+  recipients : TEXT
+  notify_method : VARCHAR(20)
+  enabled : TINYINT(1)
+  last_run_at : DATETIME
+  next_run_at : DATETIME
+  created_at : DATETIME
+}
+
+' ============================================================
+'  域 8: 仪器管理 (3 表)
+' ============================================================
+
+entity "instrument_registry\n仪器注册表" as inst_reg #ECEFF1 {
+  * id : BIGINT <<PK>>
+  --
+  * instrument_id : VARCHAR(32) <<UQ>>
+  driver_id : VARCHAR(32) <<IDX>>
+  manufacturer : VARCHAR(64)
+  model : VARCHAR(64)
+  serial_number : VARCHAR(64)
+  firmware_ver : VARCHAR(32)
+  hardware_rev : VARCHAR(32)
+  location : VARCHAR(128)
+  status : VARCHAR(20) <<IDX>>
+  registered_at : DATETIME
+  last_seen_at : DATETIME
+}
+
+entity "instrument_telemetry\n仪器遥测" as inst_tele #ECEFF1 {
+  * id : BIGINT <<PK>>
+  --
+  instrument_id : VARCHAR(32) <<IDX>>
+  cpu_temp : DECIMAL(5,2)
+  ambient_temp : DECIMAL(5,2)
+  humidity : DECIMAL(5,2)
+  reagent_remain : INT
+  uptime_seconds : BIGINT
+  active_faults : JSON
+  recorded_at : DATETIME <<IDX>>
+}
+
+entity "firmware_upgrade_log\n固件升级记录" as fw_log #ECEFF1 {
+  * id : BIGINT <<PK>>
+  --
+  instrument_id : VARCHAR(32) <<IDX>>
+  from_version : VARCHAR(32)
+  to_version : VARCHAR(32)
+  status : VARCHAR(20)
+  started_at : DATETIME
+  completed_at : DATETIME
+  error_message : TEXT
+  created_at : DATETIME
+}
+
+inst_reg ||--o{ inst_tele
+inst_reg ||--o{ fw_log
+
+' ============================================================
+'  域 9: 审计 (1 表)
+' ============================================================
+
+entity "audit_log\n审计日志" as audit #ECEFF1 {
+  * id : BIGINT <<PK>>
+  --
+  user_id : BIGINT <<IDX>>
+  user_name : VARCHAR(64)
+  action : VARCHAR(64) <<IDX>>
+  resource_type : VARCHAR(64) <<IDX>>
+  resource_id : VARCHAR(64)
+  detail : JSON
+  client_ip : VARCHAR(45)
+  session_id : VARCHAR(64)
+  created_at : DATETIME <<IDX>>
+}
+
+' ============================================================
+'  跨域关系标注
+' ============================================================
+
+' 样本 → 结果
+sample ||--o{ org_result : "1:N\n样本有多个鉴定结果"
+
+' 结果 → 药敏
+org_result ||--o{ ast_result : "1:N\n每个鉴定结果\n有多个药敏"
+
+' 结果 → 危急值
+org_result ||--o{ crit_alert : "1:N\n触发多个告警"
+
+' ============================================================
+'  域边界
+' ============================================================
+
+rectangle " 字典/码表 (4)" #E8F5E9 {
+  hospital, org_dict, abx_dict, spec_dict
+}
+
+rectangle " RBAC 权限 (5)" #E3F2FD {
+  sys_user, sys_role, sys_perm, user_role, role_perm
+}
+
+rectangle " 样本管理 (3) — 核心" #FFF9C4 {
+  sample, sample_test, sample_track
+}
+
+rectangle " 检验结果 (3) — 核心" #FFE0B2 {
+  org_result, ast_result, raw_msg
+}
+
+rectangle " 工作流 & 告警 (2)" #FFCDD2 {
+  wf_rule, crit_alert
+}
+
+rectangle " LIS 通信 (2)" #E8F5E9 {
+  lis_config, out_msg
+}
+
+rectangle " 报告 (2)" #F3E5F5 {
+  rpt_tmpl, rpt_sched
+}
+
+rectangle " 仪器管理 (3)" #ECEFF1 {
+  inst_reg, inst_tele, fw_log
+}
+
+rectangle " 审计 (1)" #ECEFF1 {
+  audit
+}
+
+@enduml

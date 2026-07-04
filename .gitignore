@@ -31,3 +31,9 @@ dist/
 # Config overrides
 application-local.yml
 application-*.yml.bak
+
+# Tools (downloaded binaries)
+docs/plantuml.jar
+
+# Generated reports
+myla-reports/
