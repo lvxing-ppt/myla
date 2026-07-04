@@ -7,27 +7,31 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * TCP 通信通道实现。
+ * TCP 通信通道实现（基于 JDK 原生 ServerSocket）。
  * <p>
- * 实现 {@link CommunicationChannel} 接口，基于 TCP ServerSocket 进行被动监听。
- * 仪器作为 TCP 客户端主动连接到网关，建立长连接后进行双向数据通信。
+ * 实现 {@link CommunicationChannel} 接口，使用阻塞 I/O 模型进行 TCP 通信。
+ * 适用于一期快速验证和少量仪器连接的场景。
+ * 对于需要多连接并发、高吞吐量的生产环境，请使用 {@link NettyTcpChannel}。
  * </p>
  *
- * <h3>工作流程：</h3>
- * <ol>
- *   <li>{@link #open(DriverConfig.ChannelConfig)} 在指定端口启动 ServerSocket 监听</li>
- *   <li>在新线程中循环 accept() 等待仪器连接</li>
- *   <li>建立连接后持续读取输入流数据，每次读取到数据即回调消息监听器</li>
- *   <li>支持通过 {@link #send(byte[])} 方法向仪器发送指令</li>
- *   <li>{@link #close()} 关闭所有 IO 资源和 Socket</li>
- * </ol>
+ * <h3>线程模型：</h3>
+ * <p>accept 循环和 IO 读取在命名线程池 "tcp-ch-{port}" 中运行，
+ * close() 时线程池优雅关闭（等待 3 秒）。</p>
  *
- * <p><b>线程模型：</b>accept 循环和 IO 读取均在独立守护线程 "tcp-chan" 中运行。</p>
+ * <h3>限制：</h3>
+ * <ul>
+ *   <li>单连接 — 同一时间只处理一个仪器连接（适用于一对一驱动绑定场景）</li>
+ *   <li>阻塞 I/O — read() 阻塞直到有数据到达</li>
+ * </ul>
  *
  * @author MyLA Team
+ * @see NettyTcpChannel
  */
 @Slf4j
 public class TcpChannel implements CommunicationChannel {
@@ -43,6 +47,9 @@ public class TcpChannel implements CommunicationChannel {
 
     /** 输出流，用于向仪器发送指令 */
     private OutputStream out;
+
+    /** 线程池，负责 accept 和 IO 读取 */
+    private ExecutorService executor;
 
     /** 消息监听器 */
     private Consumer<byte[]> messageListener;
@@ -80,16 +87,20 @@ public class TcpChannel implements CommunicationChannel {
             running = true;
             log.info("TCP channel listening on port {}", config.getPort());
 
-            // 在独立线程中处理连接和 IO 读取
-            new Thread(() -> {
+            // 使用单线程池，避免每次 open() 都 new Thread
+            this.executor = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "tcp-ch-" + config.getPort());
+                t.setDaemon(true);
+                return t;
+            });
+
+            executor.submit(() -> {
                 while (running) {
                     try {
-                        // accept() 阻塞等待仪器连接
                         socket = serverSocket.accept();
                         in = socket.getInputStream();
                         out = socket.getOutputStream();
 
-                        // 循环读取数据，直到连接断开或通道关闭
                         byte[] buf = new byte[65536];
                         int n;
                         while (running && (n = in.read(buf)) > 0) {
@@ -100,7 +111,6 @@ public class TcpChannel implements CommunicationChannel {
                             }
                         }
                     } catch (IOException e) {
-                        // 通道仍在运行时发生的异常才上报
                         if (running && errorListener != null) {
                             ConnectionError err = new ConnectionError();
                             err.setChannelType("TCP");
@@ -109,7 +119,7 @@ public class TcpChannel implements CommunicationChannel {
                         }
                     }
                 }
-            }, "tcp-chan").start();
+            });
         } catch (IOException e) {
             throw new RuntimeException("TCP channel open failed on port " + config.getPort(), e);
         }
@@ -117,10 +127,7 @@ public class TcpChannel implements CommunicationChannel {
 
     /**
      * 关闭 TCP 通道。
-     * <p>
-     * 依次关闭输入流、输出流、Socket、ServerSocket。
-     * 每个资源关闭时的异常均被静默忽略，确保所有资源都有机会被释放。
-     * </p>
+     * <p>设置关闭标志 → 关闭 IO 资源 → 关闭 ServerSocket → 优雅关闭线程池（等3秒）。</p>
      */
     @Override
     public void close() {
@@ -129,6 +136,11 @@ public class TcpChannel implements CommunicationChannel {
         try { if (out != null) out.close(); } catch (IOException ignored) {}
         try { if (socket != null) socket.close(); } catch (IOException ignored) {}
         try { if (serverSocket != null) serverSocket.close(); } catch (IOException ignored) {}
+        if (executor != null) {
+            executor.shutdown();
+            try { executor.awaitTermination(3, TimeUnit.SECONDS); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
     }
 
     /**
