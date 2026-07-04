@@ -24,6 +24,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.version>1.0</project.version>
     </properties>
     <dependencyManagement>
         <dependencies>

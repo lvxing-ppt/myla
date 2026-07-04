@@ -11,5 +11,6 @@ public class AstResultDTO {
     private String sirInterpretation;
     private String machineSIR;
     private String manualSIR;
+    private String finalSIR;
     private String expertRuleComment;
 }

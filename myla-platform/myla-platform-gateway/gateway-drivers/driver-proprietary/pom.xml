@@ -10,4 +10,31 @@
     </parent>
     <artifactId>driver-proprietary</artifactId>
     <name>Driver Proprietary</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-channel</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-protocol</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
 </project>

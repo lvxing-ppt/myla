@@ -10,4 +10,11 @@
     </parent>
     <artifactId>myla-platform-sample</artifactId>
     <name>MYLA Platform Sample</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+    </dependencies>
 </project>

@@ -10,4 +10,11 @@
     </parent>
     <artifactId>myla-platform-notification</artifactId>
     <name>MYLA Platform Notification</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+    </dependencies>
 </project>
