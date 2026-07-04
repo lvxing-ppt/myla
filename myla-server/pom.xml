@@ -13,9 +13,38 @@
     <dependencies>
         <dependency>
             <groupId>com.myla</groupId>
-            <artifactId>myla-platform-gateway</artifactId>
+            <artifactId>gateway-core</artifactId>
             <version>${project.version}</version>
-            <type>pom</type>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-channel</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-splitter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-protocol</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-device-mgmt</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>driver-vitek2</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>driver-proprietary</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>com.myla</groupId>
