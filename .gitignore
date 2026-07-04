@@ -24,6 +24,10 @@ logs/
 *.swp
 *~
 
+# Node
+node_modules/
+dist/
+
 # Config overrides
 application-local.yml
 application-*.yml.bak
