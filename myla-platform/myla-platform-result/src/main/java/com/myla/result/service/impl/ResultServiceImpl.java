@@ -21,6 +21,24 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * MYLA 系统检验结果服务实现类。
+ * 实现检验结果的保存和审核业务逻辑。
+ *
+ * 保存结果流程（事务性操作）：
+ * 1. 生成唯一 resultId（UUID 前16位）
+ * 2. 根据样本条码查找样本ID
+ * 3. 构建并保存细菌鉴定结果（OrganismResult），默认审核状态为 PENDING
+ * 4. 遍历药敏结果列表，逐条构建并保存 AST 药敏结果
+ * 5. 通过 RabbitMQ 发布 "AST_RESULT_RECEIVED" 领域事件到工作流模块（路由键：lab.event，交换机：myla.workflow）
+ *
+ * 审核结果流程（事务性操作）：
+ * 1. 根据ID查询检验结果，不存在则抛出异常
+ * 2. 校验当前状态必须为 PENDING
+ * 3. 根据审核动作更新状态（APPROVE -> APPROVED, REJECT -> REJECTED）
+ * 4. 批准时发布 "RESULT_APPROVED" 领域事件
+ * 5. 记录审核人和审核时间
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,6 +48,14 @@ public class ResultServiceImpl implements ResultService {
     private final AstResultMapper astResultMapper;
     private final RabbitTemplate rabbitTemplate;
 
+    /**
+     * 保存仪器解析后的统一检验结果。
+     * 在事务中完成细菌鉴定结果和药敏结果的持久化，
+     * 并发布领域事件通知工作流模块进行后续处理（如危急值判定、专家规则触发等）。
+     *
+     * @param unifiedResult 统一格式的检验结果，包含仪器ID、细菌信息、药敏数据和原始消息
+     * @return 保存后的细菌鉴定结果实体
+     */
     @Override
     @Transactional
     public OrganismResult saveResult(UnifiedResult unifiedResult) {
@@ -76,6 +102,20 @@ public class ResultServiceImpl implements ResultService {
         return org;
     }
 
+    /**
+     * 审核检验结果。
+     * 对指定 ID 的检验结果执行审核操作。
+     * 业务规则：
+     * - 仅 PENDING 状态的结果可被审核
+     * - APPROVE 操作将状态更新为 APPROVED 并发布 RESULT_APPROVED 事件
+     * - REJECT 操作将状态更新为 REJECTED
+     * - 传入无效动作时抛出 BAD_REQUEST 异常
+     *
+     * @param id       检验结果主键ID
+     * @param action   审核动作：APPROVE-批准 / REJECT-拒绝
+     * @param reviewer 审核人用户名
+     * @throws BusinessException 当结果不存在、状态不是 PENDING 或审核动作无效时抛出
+     */
     @Override
     @Transactional
     public void reviewResult(Long id, String action, String reviewer) {
@@ -103,6 +143,14 @@ public class ResultServiceImpl implements ResultService {
         log.info("Result reviewed: id={}, action={}, reviewer={}", id, action, reviewer);
     }
 
+    /**
+     * 根据样本条码查找样本ID。
+     * 生产环境应通过 SampleMapper 查询样本表获取实际ID。
+     * 当前为占位实现，返回默认值 0L。
+     *
+     * @param barcode 样本条码
+     * @return 样本数据库主键ID
+     */
     private Long findSampleIdByBarcode(String barcode) {
         // In production, this would query the sample table via SampleMapper.
         // For now, return 0L as a placeholder.
