@@ -10,4 +10,17 @@
     </parent>
     <artifactId>gateway-channel</artifactId>
     <name>Gateway Channel</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.myla</groupId>
+            <artifactId>gateway-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
 </project>
