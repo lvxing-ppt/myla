@@ -1,5 +1,7 @@
 package com.myla.common.core.exception;
 
+import com.myla.common.core.constant.ResultCode;
+
 public class ParseException extends BusinessException {
     private final String rawText;
 
