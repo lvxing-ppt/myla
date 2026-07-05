@@ -5,6 +5,7 @@ import com.myla.admin.security.JwtTokenProvider;
 import com.myla.admin.service.UserService;
 import com.myla.common.core.util.R;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JdbcTemplate jdbc;
 
     /**
      * 用户登录接口。
@@ -36,17 +38,23 @@ public class AuthController {
      *         登录失败返回 UNAUTHORIZED 错误码
      */
     @PostMapping("/login")
-    public R<Map<String, String>> login(@RequestBody Map<String, String> body) {
+    public R<Map<String, Object>> login(@RequestBody Map<String, String> body) {
         String username = body.get("username");
         String password = body.get("password");
 
         SysUser user = userService.findByUsername(username);
-        // In production, verify password hash using BCrypt
-        if (user == null) {
+        if (user == null || !password.equals(user.getPasswordHash())) {
             return R.fail(com.myla.common.core.constant.ResultCode.UNAUTHORIZED);
         }
 
-        String token = jwtTokenProvider.createToken(username, List.of("USER"));
-        return R.ok(Map.of("token", token, "username", username));
+        // 查询用户角色
+        List<String> roles = jdbc.queryForList(
+            "SELECT r.role_code FROM sys_role r " +
+            "JOIN sys_user_role ur ON r.id = ur.role_id WHERE ur.user_id = ?",
+            String.class, user.getId());
+        if (roles.isEmpty()) roles = List.of("ROLE_TECHNICIAN");
+
+        String token = jwtTokenProvider.createToken(username, roles);
+        return R.ok(Map.of("token", token, "username", username, "roles", roles));
     }
 }

@@ -6,6 +6,8 @@ import com.myla.result.entity.AstResult;
 import com.myla.result.entity.OrganismResult;
 import com.myla.result.mapper.AstResultMapper;
 import com.myla.result.mapper.OrganismResultMapper;
+import com.myla.sample.entity.Sample;
+import com.myla.sample.mapper.SampleMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,7 @@ public class ReportServiceImpl implements ReportService {
 
     private final OrganismResultMapper organismResultMapper;
     private final AstResultMapper astResultMapper;
+    private final SampleMapper sampleMapper;
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -40,39 +43,33 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public void exportSampleReport(String barcode, HttpServletResponse response) throws IOException {
-        // 按 barcode 尝试匹配（从 raw_message 字段模糊查找）
-        OrganismResult orgResult = findLatestByBarcode(barcode);
-        if (orgResult == null) {
+        List<OrganismResult> results = findByBarcode(barcode);
+        if (results.isEmpty()) {
             response.setStatus(404);
-            response.getWriter().write("{\"error\":\"未找到样本 " + barcode + " 的检验结果\"}");
+            response.getWriter().write("{\"error\":\"not found: " + barcode + "\"}");
             return;
         }
-
-        Workbook wb = buildReportWorkbook(orgResult);
-
-        String filename = "检验报告_" + barcode + "_" +
+        Workbook wb = buildReportWorkbook(barcode, results);
+        String filename = "Report_" + barcode + "_" +
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition",
                 "attachment; filename*=UTF-8''" + URLEncoder.encode(filename, StandardCharsets.UTF_8));
         wb.write(response.getOutputStream());
         wb.close();
-        log.info("Report exported: barcode={}, organism={}", barcode, orgResult.getOrganismName());
+        log.info("Report exported: barcode={}, instruments={}", barcode, results.size());
     }
 
     @Override
     public String generateSampleReport(String barcode) throws IOException {
-        OrganismResult orgResult = findLatestByBarcode(barcode);
-        if (orgResult == null) return null;
-
-        Workbook wb = buildReportWorkbook(orgResult);
+        List<OrganismResult> results = findByBarcode(barcode);
+        if (results.isEmpty()) return null;
+        Workbook wb = buildReportWorkbook(barcode, results);
         String dir = System.getProperty("java.io.tmpdir") + "myla-reports/";
         new File(dir).mkdirs();
         String path = dir + "report_" + barcode + "_" +
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + ".xlsx";
-        try (FileOutputStream fos = new FileOutputStream(path)) {
-            wb.write(fos);
-        }
+        try (FileOutputStream fos = new FileOutputStream(path)) { wb.write(fos); }
         wb.close();
         log.info("Report generated: {}", path);
         return path;
@@ -80,10 +77,10 @@ public class ReportServiceImpl implements ReportService {
 
     // ==================== Excel 构建 ====================
 
-    private Workbook buildReportWorkbook(OrganismResult orgResult) {
+    /** 构建报告 Workbook — 支持多仪器数据汇总 */
+    private Workbook buildReportWorkbook(String barcode, List<OrganismResult> results) {
         Workbook wb = new XSSFWorkbook();
 
-        // 样式
         CellStyle titleStyle = createStyle(wb, 16, true, HorizontalAlignment.CENTER);
         CellStyle headerStyle = createStyle(wb, 11, true, HorizontalAlignment.LEFT);
         headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
@@ -103,95 +100,94 @@ public class ReportServiceImpl implements ReportService {
         tableCell.setBorderLeft(BorderStyle.THIN);
         tableCell.setBorderRight(BorderStyle.THIN);
 
-        // ---- Sheet 1: 检验报告 ----
         Sheet sheet = wb.createSheet("检验报告");
+        int r = 0;
 
-        int r = 0; // 当前行
-        // 标题行
+        // 标题
         Row titleRow = sheet.createRow(r++);
         Cell titleCell = titleRow.createCell(0);
         titleCell.setCellValue("微生物检验报告单");
         titleCell.setCellStyle(titleStyle);
         sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 6));
         titleRow.setHeightInPoints(30);
-
-        // 空行
         r++;
 
-        // === 样本信息区域 ===
+        // 样本信息
         addSection(sheet, r++, "样本信息", headerStyle);
-        r = addKV(sheet, r, "样本条码", parseBarcode(orgResult), labelStyle, valueStyle);
-        r = addKV(sheet, r, "检验仪器", orgResult.getInstrumentId(), labelStyle, valueStyle);
-        r = addKV(sheet, r, "检验时间", orgResult.getTestTime() != null ? orgResult.getTestTime().format(DT_FMT) : "", labelStyle, valueStyle);
-        r = addKV(sheet, r, "结果编号", orgResult.getResultId(), labelStyle, valueStyle);
+        r = addKV(sheet, r, "样本条码", barcode, labelStyle, valueStyle);
+        r = addKV(sheet, r, "数据来源", results.size() + " 台仪器", labelStyle, valueStyle);
+        r = addKV(sheet, r, "报告时间", LocalDateTime.now().format(DT_FMT), labelStyle, valueStyle);
         r++;
 
-        // === 菌种鉴定区域 ===
-        addSection(sheet, r++, "菌种鉴定结果", headerStyle);
-        r = addKV(sheet, r, "菌种名称", orgResult.getOrganismName(), labelStyle, valueStyle);
-        r = addKV(sheet, r, "菌种编码", orgResult.getOrganismCode(), labelStyle, valueStyle);
-        r = addKV(sheet, r, "鉴定置信度", orgResult.getIdentificationPercent() != null ? orgResult.getIdentificationPercent() + "%" : "", labelStyle, valueStyle);
-        r = addKV(sheet, r, "审核状态", orgResult.getReviewStatus(), labelStyle, valueStyle);
-        r++;
-
-        // === 药敏结果区域 ===
-        List<AstResult> astResults = astResultMapper.selectList(
-                new LambdaQueryWrapper<AstResult>()
-                        .eq(AstResult::getOrganismResultId, orgResult.getId()));
-        if (!astResults.isEmpty()) {
-            addSection(sheet, r++, "药敏试验结果 (" + astResults.size() + " 项)", headerStyle);
-
-            // 表头
-            Row thRow = sheet.createRow(r++);
-            String[] cols = {"抗生素名称", "MIC 值", "单位", "仪器判读", "最终判读", "专家规则备注"};
-            for (int i = 0; i < cols.length; i++) {
-                Cell c = thRow.createCell(i);
-                c.setCellValue(cols[i]);
-                c.setCellStyle(tableHeader);
+        // 遍历每台仪器的结果
+        for (int i = 0; i < results.size(); i++) {
+            OrganismResult orgResult = results.get(i);
+            if (results.size() > 1) {
+                addSection(sheet, r++, "【仪器 " + (i+1) + "】" + orgResult.getInstrumentId()
+                    + " — " + formatTime(orgResult.getTestTime()), headerStyle);
+            } else {
+                addSection(sheet, r++, "仪器: " + orgResult.getInstrumentId(), headerStyle);
             }
 
-            // 数据行
-            for (AstResult ast : astResults) {
-                Row tr = sheet.createRow(r++);
-                setCell(tr, 0, ast.getAntibioticName(), tableCell);
-                setCell(tr, 1, ast.getMicValue() != null ? String.valueOf(ast.getMicValue()) : "", tableCell);
-                setCell(tr, 2, ast.getMicUnit(), tableCell);
-                setCell(tr, 3, ast.getMachineSir(), tableCell);
-                setCell(tr, 4, ast.getFinalSir(), tableCell);
-                setCell(tr, 5, ast.getExpertRuleComment(), tableCell);
+            // 菌种鉴定
+            if (orgResult.getOrganismName() != null) {
+                r = addKV(sheet, r, "菌种名称", orgResult.getOrganismName(), labelStyle, valueStyle);
+                if (orgResult.getIdentificationPercent() != null) {
+                    r = addKV(sheet, r, "鉴定置信度", orgResult.getIdentificationPercent() + "%", labelStyle, valueStyle);
+                }
             }
+
+            // 药敏
+            List<AstResult> astResults = astResultMapper.selectList(
+                new LambdaQueryWrapper<AstResult>().eq(AstResult::getOrganismResultId, orgResult.getId()));
+            if (!astResults.isEmpty()) {
+                r++;
+                Row thRow = sheet.createRow(r++);
+                String[] cols = {"抗生素", "MIC", "单位", "仪器判读", "最终判读", "备注"};
+                for (int j = 0; j < cols.length; j++) {
+                    Cell c = thRow.createCell(j); c.setCellValue(cols[j]); c.setCellStyle(tableHeader);
+                }
+                for (AstResult ast : astResults) {
+                    Row tr = sheet.createRow(r++);
+                    setCell(tr, 0, ast.getAntibioticName(), tableCell);
+                    setCell(tr, 1, ast.getMicValue() != null ? String.valueOf(ast.getMicValue()) : "", tableCell);
+                    setCell(tr, 2, ast.getMicUnit(), tableCell);
+                    setCell(tr, 3, ast.getMachineSir(), tableCell);
+                    setCell(tr, 4, ast.getFinalSir(), tableCell);
+                    setCell(tr, 5, ast.getExpertRuleComment(), tableCell);
+                }
+            }
+            r++;
         }
 
-        // === 页脚 ===
-        r++;
+        // 页脚
         Row footerRow = sheet.createRow(r);
-        Cell footerCell = footerRow.createCell(0);
-        footerCell.setCellValue("报告生成时间: " + LocalDateTime.now().format(DT_FMT) +
-                "  |  本报告仅供临床参考");
-        footerCell.setCellStyle(createStyle(wb, 9, false, HorizontalAlignment.LEFT));
-
-        // 列宽
+        footerRow.createCell(0).setCellValue("Report time: " + LocalDateTime.now().format(DT_FMT));
         sheet.setColumnWidth(0, 5000);
         sheet.setColumnWidth(1, 5000);
         sheet.setColumnWidth(2, 3000);
         sheet.setColumnWidth(3, 4000);
         sheet.setColumnWidth(4, 4000);
         sheet.setColumnWidth(5, 8000);
-        sheet.setColumnWidth(6, 4000);
 
         return wb;
     }
 
+    private String formatTime(LocalDateTime t) {
+        return t != null ? t.format(DT_FMT) : "N/A";
+    }
+
     // ==================== 辅助方法 ====================
 
-    /** 在 raw_message 中模糊查找包含指定条码的最新 organism_result */
-    private OrganismResult findLatestByBarcode(String barcode) {
-        List<OrganismResult> list = organismResultMapper.selectList(
-                new LambdaQueryWrapper<OrganismResult>()
-                        .like(OrganismResult::getRawMessage, barcode)
-                        .orderByDesc(OrganismResult::getCreatedAt)
-                        .last("LIMIT 1"));
-        return list.isEmpty() ? null : list.get(0);
+    /** 按 barcode 查找所有关联的 organism_result（支持多仪器数据串联） */
+    private List<OrganismResult> findByBarcode(String barcode) {
+        Sample sample = sampleMapper.selectOne(
+            new LambdaQueryWrapper<Sample>().eq(Sample::getBarcode, barcode));
+        if (sample == null) return List.of();
+        return organismResultMapper.selectList(
+            new LambdaQueryWrapper<OrganismResult>()
+                .eq(OrganismResult::getSampleId, sample.getId())
+                .orderByAsc(OrganismResult::getCreatedAt));
     }
 
     /** 从 raw_message 中尝试提取条码 */

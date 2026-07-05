@@ -55,6 +55,15 @@ public class OrganismResult {
     /** 审核时间 */
     private LocalDateTime reviewedAt;
 
+    /** 一级技术审核人 */
+    private String techReviewedBy;
+    /** 一级技术审核时间 */
+    private LocalDateTime techReviewedAt;
+    /** 二级临床审核人 */
+    private String clinicalReviewedBy;
+    /** 二级临床审核时间 */
+    private LocalDateTime clinicalReviewedAt;
+
     /** 原始仪器消息文本，用于追溯和数据恢复 */
     private String rawMessage;
 

@@ -95,4 +95,13 @@ public class JwtTokenProvider {
             .getPayload()
             .getSubject();
     }
+
+    /** 从 Token 中提取角色列表 */
+    @SuppressWarnings("unchecked")
+    public List<String> getRoles(String token) {
+        return (List<String>) Jwts.parser().verifyWith(key).build()
+            .parseSignedClaims(token)
+            .getPayload()
+            .get("roles", List.class);
+    }
 }

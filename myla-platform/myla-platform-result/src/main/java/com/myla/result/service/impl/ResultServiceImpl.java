@@ -120,31 +120,75 @@ public class ResultServiceImpl implements ResultService {
      * @param reviewer 审核人用户名
      * @throws BusinessException 当结果不存在、状态不是 PENDING 或审核动作无效时抛出
      */
+    /**
+     * 三级审核状态机：
+     * <pre>
+     * PENDING →(一级技术审核) TECH_APPROVED / REJECTED
+     * TECH_APPROVED →(二级临床审核) CLINICAL_APPROVED / REJECTED
+     * CLINICAL_APPROVED →(三级终审) RELEASED / REJECTED
+     * </pre>
+     */
     @Override
     @Transactional
-    public void reviewResult(Long id, String action, String reviewer) {
+    public void reviewResult(Long id, String action, String reviewer, String reviewerRole) {
         OrganismResult result = organismResultMapper.selectById(id);
-        if (result == null) {
-            throw new BusinessException(ResultCode.RESULT_NOT_FOUND);
-        }
-        if (!"PENDING".equals(result.getReviewStatus())) {
-            throw new BusinessException(ResultCode.INVALID_SAMPLE_STATUS);
+        if (result == null) throw new BusinessException(ResultCode.RESULT_NOT_FOUND);
+
+        String current = result.getReviewStatus();
+        boolean isApprove = "APPROVE".equalsIgnoreCase(action);
+        boolean isReject = "REJECT".equalsIgnoreCase(action);
+
+        switch (current) {
+            case "PENDING" -> {
+                if (isApprove && "ROLE_TECHNICIAN".equals(reviewerRole)) {
+                    result.setReviewStatus("TECH_APPROVED");
+                    result.setTechReviewedBy(reviewer);
+                    result.setTechReviewedAt(LocalDateTime.now());
+                } else if (isReject && "ROLE_TECHNICIAN".equals(reviewerRole)) {
+                    result.setReviewStatus("REJECTED");
+                    result.setTechReviewedBy(reviewer);
+                    result.setTechReviewedAt(LocalDateTime.now());
+                } else {
+                    throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "PENDING requires TECHNICIAN role for APPROVE/REJECT");
+                }
+            }
+            case "TECH_APPROVED" -> {
+                if (isApprove && "ROLE_REVIEWER".equals(reviewerRole)) {
+                    result.setReviewStatus("CLINICAL_APPROVED");
+                    result.setClinicalReviewedBy(reviewer);
+                    result.setClinicalReviewedAt(LocalDateTime.now());
+                } else if (isReject && "ROLE_REVIEWER".equals(reviewerRole)) {
+                    result.setReviewStatus("REJECTED");
+                    result.setClinicalReviewedBy(reviewer);
+                    result.setClinicalReviewedAt(LocalDateTime.now());
+                } else {
+                    throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "TECH_APPROVED requires REVIEWER role for APPROVE/REJECT");
+                }
+            }
+            case "CLINICAL_APPROVED" -> {
+                if (isApprove && "ROLE_DIRECTOR".equals(reviewerRole)) {
+                    result.setReviewStatus("RELEASED");
+                    result.setReviewedBy(reviewer);
+                    result.setReviewedAt(LocalDateTime.now());
+                    rabbitTemplate.convertAndSend("myla.workflow", "lab.event", LabEvent.RESULT_RELEASED_TO_LIS);
+                } else if (isReject && "ROLE_DIRECTOR".equals(reviewerRole)) {
+                    result.setReviewStatus("REJECTED");
+                    result.setReviewedBy(reviewer);
+                    result.setReviewedAt(LocalDateTime.now());
+                } else {
+                    throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "CLINICAL_APPROVED requires DIRECTOR role for APPROVE/REJECT");
+                }
+            }
+            default -> throw new BusinessException(ResultCode.INVALID_SAMPLE_STATUS,
+                "Status " + current + " cannot be reviewed");
         }
 
-        if ("APPROVE".equalsIgnoreCase(action)) {
-            result.setReviewStatus("APPROVED");
-            rabbitTemplate.convertAndSend("myla.workflow", "lab.event", LabEvent.RESULT_APPROVED);
-        } else if ("REJECT".equalsIgnoreCase(action)) {
-            result.setReviewStatus("REJECTED");
-        } else {
-            throw new BusinessException(ResultCode.BAD_REQUEST);
-        }
-
-        result.setReviewedBy(reviewer);
-        result.setReviewedAt(LocalDateTime.now());
         organismResultMapper.updateById(result);
-
-        log.info("Result reviewed: id={}, action={}, reviewer={}", id, action, reviewer);
+        log.info("Result reviewed: id={}, action={}, role={}, reviewer={}, {}→{}",
+            id, action, reviewerRole, reviewer, current, result.getReviewStatus());
     }
 
     /**

@@ -33,5 +33,5 @@ public interface ResultService {
      * @param action   审核动作：APPROVE-批准，REJECT-拒绝
      * @param reviewer 审核人用户名
      */
-    void reviewResult(Long id, String action, String reviewer);
+    void reviewResult(Long id, String action, String reviewer, String reviewerRole);
 }
