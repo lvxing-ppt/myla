@@ -1913,7 +1913,7 @@ Vitek2Parser 解析 ASTM 管式分隔 (`O|` / `R|`) 记录到 UnifiedResult。Vi
 
 路径: `gateway-device-mgmt/.../InstrumentRegistry.java`, `InstrumentMgmtServiceImpl.java`, `InstrumentController.java`
 
-InstrumentRegistry 实体 + Mapper，启动时自动注册仪器到 DB。收到数据刷新 `lastSeenAt` 心跳（数据即心跳，不空轮询）。`@Scheduled(fixedDelay=120000)` 每 2 分钟扫描 ONLINE 仪器 → `lastSeenAt` 超时 → 自动标记 OFFLINE。REST API: `GET/PUT/DELETE /api/v1/instruments`。
+InstrumentRegistry 实体 + Mapper，启动时自动注册仪器到 DB。收到数据刷新 `lastSeenAt` 心跳（数据即心跳，不空轮询）。`@Scheduled(fixedDelay=120000)` 每 2 分钟扫描 ONLINE 仪器 → `lastSeenAt` 超时 → 自动标记 OFFLINE。REST API: `GET/PUT/DELETE /api/v1/instruments`。POST `/register` 动态注册 + `channel_config` JSON 持久化 + Spring 事件热加载。WebSocket STOMP `/ws` → `/topic/instruments` 实时推送状态变化（仅状态真正变更时推送）。
 
 - [ ] **Step 10: 数据可靠性保障**
 
@@ -1923,11 +1923,32 @@ InstrumentRegistry 实体 + Mapper，启动时自动注册仪器到 DB。收到�
 
 - [ ] **Step 11: SPI 自动发现 + 模块合并**
 
-`ServiceLoader<InstrumentDriver>` 替代硬编码 switch，新仪器只需在 `META-INF/services` 注册一行。23 个 Maven 模块合并为 12 个（common 三合一 + gateway 六合一）。全部 POM 添加中文 `<description>`。
+`ServiceLoader<InstrumentDriver>` 替代硬编码 switch，新仪器只需在 `META-INF/services` 注册一行。DCL 驱动缓存，首次扫描后复用模板实例。23 个 Maven 模块合并为 12 个（common 三合一 + gateway 六合一）。全部 POM 添加中文 `<description>`。
+
+- [ ] **Step 12: RBAC 三级审核 + 前端 API 补全**
+
+路径: `AuthController.java`, `ResultServiceImpl.java`, `DashboardController.java`, `UserController.java`, `DictController.java`
+
+JWT 认证 + Spring Security + @EnableMethodSecurity。admin/admin123 默认账户。TECHNICIAN→REVIEWER→DIRECTOR 三级角色审核状态机。`organism_result` 表新增 `tech_reviewed_by/at`、`clinical_reviewed_by/at`。前端 7 页面全部 API 就位：`GET /api/v1/dashboard/stats`（todaySamples/pendingReview/onlineInstruments/criticalAlerts）、`GET/POST/PUT/DELETE /api/v1/users`、`GET /api/v1/dict/organisms|antibiotics|specimens`、`GET /api/v1/results?status=PENDING`（分页）、`GET /api/v1/results/{id}`（含 AST 明细）。
+
+- [ ] **Step 13: Snowflake 全局 ID + 样本状态机重设计**
+
+路径: `SnowflakeIdGenerator.java`, `MybatisPlusConfig.java`, `SampleServiceImpl.java`, `Sample.java`
+
+雪花算法 ID 生成器（41位时间戳+10位机器ID+12位序列号+时钟回拨检测）。MyBatis-Plus 全局 `IdentifierGenerator` 替换。12 个实体 `IdType.AUTO` → `IdType.ASSIGN_ID`。`application.yml` 全局 `id-type: assign_id`。
+
+样本物理状态机重设计（与数据审核状态解耦）：
+`ORDER_RECEIVED → ACCEPTED → GRAM_STAINED → INOCULATED → INCUBATING → ORGANISM_ISOLATED → COMPLETED`
+分支终态：`REJECTED`（拒收）、`CULTURE_NEGATIVE`（培养阴性）、`CULTURE_CONTAMINATED`（污染）。
+`VALID_TRANSITIONS` 定义 13 条合法路径 + `TERMINAL_STATUSES` 终态锁定 + `STATUS_EVENT` 领域事件映射。
+
+- [ ] **Step 14: 启动异常处理 + 清理**
+
+`GatewayBootstrap.run()` 捕获单台仪器启动异常，收集到 `failedInstruments` 列表，其他仪器不受影响，启动完成后汇总报告。MQ 旧队列清理（格式升级后 `result.parsed`/`lab.event` 残留消息清除）。Report 多仪器数据汇总（`findByBarcode` → `sample_id` → 全部 `organism_result`）。
 
 所有业务模块创建完毕后编译验证。
 
-- [ ] **Step 12: 编译 + Commit**
+- [ ] **Step 15: 编译 + Commit**
 
 Run: `cd g:/myla && mvn compile -q && git add -A && git commit -m "feat: complete Phase 1 MVP - all platform modules"`
 
