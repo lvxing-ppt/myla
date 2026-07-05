@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @TableName("critical_value_alert")
 public class CriticalValueAlert {
     /** 预警主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 关联的细菌鉴定结果ID，外键关联 organism_result 表 */

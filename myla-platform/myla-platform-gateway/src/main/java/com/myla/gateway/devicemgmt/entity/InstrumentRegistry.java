@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @TableName("instrument_registry")
 public class InstrumentRegistry {
 
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 系统内唯一仪器编号 */

@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @TableName("sample")
 public class Sample {
     /** 样本主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 实验室内部样本编号，格式：yyyyMMdd-xxxx，由系统自动生成 */

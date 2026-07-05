@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @TableName("sys_user")
 public class SysUser {
     /** 用户主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 登录用户名，唯一标识 */

@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @TableName("outbound_message")
 public class OutboundMessage {
     /** 消息主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 消息唯一标识（UUID 去除连字符），用于追踪和去重 */

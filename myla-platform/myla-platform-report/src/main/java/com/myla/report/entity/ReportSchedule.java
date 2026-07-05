@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @TableName("report_schedule")
 public class ReportSchedule {
 
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 调度名称 */

@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @TableName("raw_message")
 public class RawMessage {
     /** 原始消息主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 仪器ID，标识消息来自或发往的检验仪器 */

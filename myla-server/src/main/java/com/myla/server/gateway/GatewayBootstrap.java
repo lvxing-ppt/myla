@@ -19,6 +19,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -79,6 +81,8 @@ public class GatewayBootstrap implements CommandLineRunner {
     public void run(String... args) {
         int yamlCount = properties.getGateway().getInstruments().size();
 
+        List<String> failedInstruments = new ArrayList<>();
+
         // ====== 1. 加载 YAML 配置的仪器 ======
         if (!properties.getGateway().getInstruments().isEmpty()) {
             log.info("Loading {} instrument(s) from YAML config", yamlCount);
@@ -86,29 +90,33 @@ public class GatewayBootstrap implements CommandLineRunner {
                 try {
                     bootInstrument(cfg);
                 } catch (Exception e) {
-                    log.error("YAML instrument {} failed: {}", cfg.getInstrumentId(), e.getMessage());
+                    String msg = cfg.getInstrumentId() + ": " + e.getMessage();
+                    log.error("YAML instrument {} failed: {}", cfg.getInstrumentId(), e.getMessage(), e);
+                    failedInstruments.add(msg);
                 }
             }
         }
 
         // ====== 2. 加载 DB 中动态注册的仪器 ======
         var dbInstruments = instrumentMgmtService.listAll();
-        int dbLoaded = 0;
         for (var reg : dbInstruments) {
             if (reg.getChannelConfig() == null || reg.getChannelConfig().isBlank()) continue;
-            // 跳过 YAML 已加载的
             if (contexts.containsKey(reg.getInstrumentId())) continue;
 
             try {
                 bootInstrumentFromDb(reg);
-                dbLoaded++;
             } catch (Exception e) {
-                log.error("DB instrument {} failed: {}", reg.getInstrumentId(), e.getMessage());
+                String msg = reg.getInstrumentId() + ": " + e.getMessage();
+                log.error("DB instrument {} failed: {}", reg.getInstrumentId(), e.getMessage(), e);
+                failedInstruments.add(msg);
             }
         }
 
-        log.info("Gateway boot complete: {} YAML + {} DB = {} instrument(s)",
-                contexts.size() - dbLoaded, dbLoaded, contexts.size());
+        log.info("Gateway boot complete: {} instrument(s) started, {} failed",
+                contexts.size(), failedInstruments.size());
+        if (!failedInstruments.isEmpty()) {
+            log.warn("Failed instruments: {}", String.join(", ", failedInstruments));
+        }
     }
 
     /**
@@ -201,16 +209,32 @@ public class GatewayBootstrap implements CommandLineRunner {
      * <p>新增仪器驱动只需：1. 实现 InstrumentDriver 2. 在 META-INF/services 注册 3. YAML 配置。
      * 无需修改此处代码。</p>
      */
+    /** SPI 驱动缓存，启动时加载一次 */
+    private static final Map<String, InstrumentDriver> DRIVER_CACHE = new ConcurrentHashMap<>();
+
     private InstrumentDriver createDriver(String driverId) {
-        var drivers = java.util.ServiceLoader.load(
-            com.myla.gateway.core.spi.InstrumentDriver.class);
-        for (var d : drivers) {
-            if (d.getDriverId().equals(driverId)) {
-                return d;
+        // 首次调用时扫描 classpath，后续从缓存取
+        if (DRIVER_CACHE.isEmpty()) {
+            synchronized (DRIVER_CACHE) {
+                if (DRIVER_CACHE.isEmpty()) {
+                    for (var d : java.util.ServiceLoader.load(InstrumentDriver.class)) {
+                        DRIVER_CACHE.put(d.getDriverId(), d);
+                        log.info("SPI discovered driver: {} ({})", d.getDriverId(), d.getDisplayName());
+                    }
+                }
             }
         }
-        throw new IllegalArgumentException(
-                "未找到驱动: " + driverId + "。请确认 Driver 实现类在 classpath 中并已在 META-INF/services 注册。");
+        InstrumentDriver driver = DRIVER_CACHE.get(driverId);
+        if (driver == null) {
+            throw new IllegalArgumentException(
+                    "未找到驱动: " + driverId + "。请确认 Driver 实现类在 classpath 中并已在 META-INF/services 注册。");
+        }
+        // 每次返回新实例，避免状态污染
+        try {
+            return driver.getClass().getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException("无法创建驱动实例: " + driverId, e);
+        }
     }
 
     /**

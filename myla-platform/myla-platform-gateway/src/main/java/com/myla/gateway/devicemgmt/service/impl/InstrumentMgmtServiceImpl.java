@@ -10,8 +10,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 仪器管理服务实现。
@@ -26,6 +30,8 @@ import java.util.List;
 public class InstrumentMgmtServiceImpl implements InstrumentMgmtService {
 
     private final InstrumentRegistryMapper registryMapper;
+    private final SimpMessagingTemplate wsTemplate;
+    private static final String WS_TOPIC = "/topic/instruments";
 
     @Override
     @Transactional
@@ -66,12 +72,16 @@ public class InstrumentMgmtServiceImpl implements InstrumentMgmtService {
                 .eq(InstrumentRegistry::getInstrumentId, instrumentId));
 
         if (reg != null) {
+            String oldStatus = reg.getStatus();
             reg.setStatus(status);
             reg.setLastSeenAt(LocalDateTime.now());
             registryMapper.updateById(reg);
             log.info("Instrument status updated: {} → {} ({})", instrumentId, status, message);
+            // 状态变更时推送 WebSocket
+            if (!status.equals(oldStatus)) {
+                pushStatus(reg);
+            }
         } else {
-            // 自动注册未在 registry 中的仪器
             log.warn("Instrument {} not registered, auto-registering", instrumentId);
             InstrumentRegistry newReg = new InstrumentRegistry();
             newReg.setInstrumentId(instrumentId);
@@ -133,6 +143,7 @@ public class InstrumentMgmtServiceImpl implements InstrumentMgmtService {
                 offlineCount++;
                 log.warn("Instrument OFFLINE detected: {} (last seen: {})",
                     reg.getInstrumentId(), reg.getLastSeenAt());
+                pushStatus(reg);  // WebSocket 推送离线通知
             }
         }
 
@@ -140,6 +151,22 @@ public class InstrumentMgmtServiceImpl implements InstrumentMgmtService {
             log.warn("Heartbeat check: {} instrument(s) marked OFFLINE", offlineCount);
         } else {
             log.debug("Heartbeat check: all {} ONLINE instruments healthy", onlineList.size());
+        }
+    }
+
+    /** WebSocket 实时推送仪器状态变更 */
+    private void pushStatus(InstrumentRegistry reg) {
+        try {
+            Map<String, Object> msg = new LinkedHashMap<>();
+            msg.put("instrumentId", reg.getInstrumentId());
+            msg.put("status", reg.getStatus());
+            msg.put("lastSeenAt", reg.getLastSeenAt() != null ? reg.getLastSeenAt().toString() : null);
+            msg.put("driverId", reg.getDriverId());
+            msg.put("model", reg.getModel());
+            wsTemplate.convertAndSend(WS_TOPIC, msg);
+            log.info("[WS] Pushed: {} status={} to {}", reg.getInstrumentId(), reg.getStatus(), WS_TOPIC);
+        } catch (Exception e) {
+            log.warn("[WS] Push failed for {}: {}", reg.getInstrumentId(), e.getMessage());
         }
     }
 }

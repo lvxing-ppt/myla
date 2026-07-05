@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @TableName("report_template")
 public class ReportTemplate {
 
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 模板编码 */

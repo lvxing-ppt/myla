@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 @TableName("workflow_rule")
 public class WorkflowRule {
     /** 规则主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 规则业务标识（唯一），用于跨系统引用 */

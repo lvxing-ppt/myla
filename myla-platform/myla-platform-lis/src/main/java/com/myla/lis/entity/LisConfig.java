@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @TableName("lis_config")
 public class LisConfig {
     /** 配置主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 医院编码，标识该配置所属的医院 */

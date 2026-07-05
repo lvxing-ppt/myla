@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 @TableName("organism_result")
 public class OrganismResult {
     /** 鉴定结果主键ID，数据库自增 */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /** 业务结果ID（唯一标识），用于跨系统追踪 */
