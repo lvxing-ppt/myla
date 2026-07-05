@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Set;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -77,16 +79,13 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String seq = String.format("%04d", nextSeq(today));
         sample.setSampleId(today + "-" + seq);
-        sample.setStatus("REGISTERED");
-        sample.setReceiveTime(LocalDateTime.now());
+        sample.setStatus("ORDER_RECEIVED");
 
         save(sample);
 
-        // Save tracking log
         jdbcTemplate.update(
-            "INSERT INTO sample_tracking (sample_id, to_status, operator, comment, created_at) VALUES (?, ?, ?, ?, ?)",
-            sample.getId(), "REGISTERED", "SYSTEM", "Sample registered", LocalDateTime.now()
-        );
+            "INSERT INTO sample_tracking (sample_id, to_status, operator, comment, created_at) VALUES (?,?,?,?,?)",
+            sample.getId(), "ORDER_RECEIVED", "SYSTEM", "Order received from LIS", LocalDateTime.now());
 
         // Publish event
         rabbitTemplate.convertAndSend("myla.workflow", "lab.event", LabEvent.SAMPLE_REGISTERED);
@@ -106,30 +105,90 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
      * @param comment    操作备注
      * @throws BusinessException 当样本不存在或当前状态不匹配时抛出
      */
+    // ==================== 样本状态机 ====================
+    //
+    //  物理标本流转（sample.status）:
+    //
+    //  ORDER_RECEIVED ──→ ACCEPTED ──→ GRAM_STAINED ──→ INOCULATED ──→ INCUBATING
+    //       │                │              │               │               │
+    //       └── REJECTED ←──┴──────────────┴───────────────┴───────────────┘
+    //                                                                       │
+    //                                                          ┌────────────┘
+    //                                                          ▼
+    //                                                   ORGANISM_ISOLATED ──→ COMPLETED
+    //                                                          │
+    //                                                   ┌──────┴──────┐
+    //                                                   ▼             ▼
+    //                                          CULTURE_NEGATIVE  CULTURE_CONTAMINATED
+    //
+    //  数据审核（organism_result.reviewStatus）—— 独立流程:
+    //  PENDING → TECH_APPROVED → CLINICAL_APPROVED → RELEASED
+    //
+
+    /** 标本流转路径（当前状态 → 允许的目标状态） */
+    private static final Map<String, Set<String>> VALID_TRANSITIONS = Map.of(
+        "ORDER_RECEIVED",       Set.of("ACCEPTED", "REJECTED"),
+        "ACCEPTED",             Set.of("GRAM_STAINED", "REJECTED"),
+        "GRAM_STAINED",         Set.of("INOCULATED", "REJECTED"),
+        "INOCULATED",           Set.of("INCUBATING", "REJECTED"),
+        "INCUBATING",           Set.of("ORGANISM_ISOLATED", "CULTURE_NEGATIVE",
+                                       "CULTURE_CONTAMINATED", "REJECTED"),
+        "ORGANISM_ISOLATED",    Set.of("COMPLETED")
+    );
+
+    /** 终态集合（不可再变更） */
+    private static final Set<String> TERMINAL_STATUSES = Set.of(
+        "COMPLETED", "REJECTED", "CULTURE_NEGATIVE", "CULTURE_CONTAMINATED");
+
+    /** 状态 → 领域事件 */
+    private static final Map<String, String> STATUS_EVENT = Map.of(
+        "ACCEPTED",              "SAMPLE_RECEIVED",
+        "ORGANISM_ISOLATED",     "ORGANISM_IDENTIFIED",
+        "COMPLETED",             "AST_RESULT_RECEIVED",
+        "CULTURE_NEGATIVE",      "CULTURE_NEGATIVE",
+        "CULTURE_CONTAMINATED",  "CULTURE_CONTAMINATED",
+        "REJECTED",              "SAMPLE_MISMATCH"
+    );
+
     @Override
     @Transactional
     public void updateStatus(Long id, String fromStatus, String toStatus, String operator, String comment) {
         Sample sample = getById(id);
-        if (sample == null) {
-            throw new BusinessException(ResultCode.SAMPLE_NOT_FOUND);
-        }
+        if (sample == null) throw new BusinessException(ResultCode.SAMPLE_NOT_FOUND);
         if (!sample.getStatus().equals(fromStatus)) {
-            throw new BusinessException(ResultCode.INVALID_SAMPLE_STATUS);
+            throw new BusinessException(ResultCode.INVALID_SAMPLE_STATUS,
+                "Expected " + fromStatus + " but is " + sample.getStatus());
+        }
+        if (TERMINAL_STATUSES.contains(sample.getStatus())) {
+            throw new BusinessException(ResultCode.INVALID_SAMPLE_STATUS,
+                "Status " + sample.getStatus() + " is terminal and cannot be changed");
+        }
+
+        // 校验合法路径
+        Set<String> allowed = VALID_TRANSITIONS.getOrDefault(fromStatus, Set.of());
+        if (!allowed.contains(toStatus)) {
+            throw new BusinessException(ResultCode.INVALID_SAMPLE_STATUS,
+                "Illegal: " + fromStatus + " → " + toStatus +
+                ". Allowed: " + String.join(", ", allowed));
         }
 
         sample.setStatus(toStatus);
+        // 签收时记录物理接收时间
+        if ("ACCEPTED".equals(toStatus)) {
+            sample.setReceiveTime(LocalDateTime.now());
+        }
         updateById(sample);
 
-        // Save tracking log
         jdbcTemplate.update(
-            "INSERT INTO sample_tracking (sample_id, from_status, to_status, operator, comment, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            sample.getId(), fromStatus, toStatus, operator, comment, LocalDateTime.now()
-        );
+            "INSERT INTO sample_tracking (sample_id,from_status,to_status,operator,comment,created_at) VALUES (?,?,?,?,?,?)",
+            sample.getId(), fromStatus, toStatus, operator, comment, LocalDateTime.now());
 
-        // Publish event
-        rabbitTemplate.convertAndSend("myla.workflow", "lab.event",
-            LabEvent.valueOf(toStatusToEvent(toStatus)));
-        log.info("Sample status updated: id={}, {} -> {}", sample.getSampleId(), fromStatus, toStatus);
+        // 发布领域事件（仅已映射的状态，无映射则静默跳过）
+        String event = STATUS_EVENT.get(toStatus);
+        if (event != null) {
+            rabbitTemplate.convertAndSend("myla.workflow", "lab.event", LabEvent.valueOf(event));
+        }
+        log.info("Sample {} → {} (by {})", fromStatus, toStatus, operator);
     }
 
     /**
@@ -191,30 +250,10 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
      * @return 下一个序号（1-based）
      */
     private int nextSeq(String today) {
-        String prefix = today + "-";
         Long count = lambdaQuery()
             .likeRight(Sample::getSampleId, today)
             .count();
         return (int) (count + 1);
     }
 
-    /**
-     * 将样本状态映射为对应的领域事件名称。
-     * 映射关系：
-     * - INOCULATED -> SAMPLE_RECEIVED
-     * - APPROVED -> RESULT_APPROVED
-     * - RELEASED -> RESULT_RELEASED_TO_LIS
-     * - 其他状态 -> SAMPLE_REGISTERED（默认）
-     *
-     * @param status 样本目标状态
-     * @return 对应的领域事件名称
-     */
-    private String toStatusToEvent(String status) {
-        return switch (status) {
-            case "INOCULATED" -> "SAMPLE_RECEIVED";
-            case "APPROVED" -> "RESULT_APPROVED";
-            case "RELEASED" -> "RESULT_RELEASED_TO_LIS";
-            default -> "SAMPLE_REGISTERED";
-        };
-    }
 }

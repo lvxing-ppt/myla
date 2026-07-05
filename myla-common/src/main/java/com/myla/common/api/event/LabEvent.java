@@ -23,6 +23,9 @@ public enum LabEvent {
     /** 培养阴性：培养到期未生长，报告阴性 */
     CULTURE_NEGATIVE,
 
+    /** 标本污染：标本被杂菌污染，报告污染 */
+    CULTURE_CONTAMINATED,
+
     /** 菌种已鉴定：仪器完成菌种鉴定并上报结果 */
     ORGANISM_IDENTIFIED,
 

@@ -47,8 +47,8 @@ public class Sample {
     /** 样本接收时间（实验室接收时间） */
     private LocalDateTime receiveTime;
 
-    /** 样本当前状态：REGISTERED-已登记，INOCULATED-已接种，
-     *  ANALYZING-分析中，APPROVED-已审核，RELEASED-已发布 */
+    /** 标本物理状态：ORDER_RECEIVED→ACCEPTED→GRAM_STAINED→INOCULATED→INCUBATING→ORGANISM_ISOLATED→COMPLETED
+     *  终态分支：REJECTED(拒收) CULTURE_NEGATIVE(培养阴性) CULTURE_CONTAMINATED(污染) */
     private String status;
 
     /** 样本优先级：STAT-紧急，ROUTINE-常规 */
