@@ -156,6 +156,17 @@ public class RabbitMqConfig {
     }
 
     /**
+     * LIS 出站触发队列。
+     * <p>TopicExchange myla.workflow 的第二订阅者，与 lab.event 队列同时收到消息。
+     * 消费者（ResultReleasedConsumer）过滤 RESULT_RELEASED_TO_LIS 事件，
+     * 构造 HL7 消息后调用 LisGatewayService.sendResult()。</p>
+     */
+    @Bean
+    public Queue lisOutboundTriggerQueue() {
+        return QueueBuilder.durable("lis.outbound.trigger").build();
+    }
+
+    /**
      * 短信通知队列。
      * <p>消费者负责通过短信网关发送通知。</p>
      */
@@ -223,6 +234,14 @@ public class RabbitMqConfig {
     @Bean
     public Binding labEventBinding() {
         return BindingBuilder.bind(labEventQueue()).to(workflowExchange()).with("lab.event");
+    }
+
+    /**
+     * 绑定：lab.event 路由键 → lisOutboundTriggerQueue（LIS 出站触发）。
+     */
+    @Bean
+    public Binding lisOutboundTriggerBinding() {
+        return BindingBuilder.bind(lisOutboundTriggerQueue()).to(workflowExchange()).with("lab.event");
     }
 
     /**
