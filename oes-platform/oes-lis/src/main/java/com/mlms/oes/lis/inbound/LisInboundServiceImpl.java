@@ -72,8 +72,18 @@ public class LisInboundServiceImpl implements LisInboundService {
             fieldMapper.apply(sample, rawFields,
                     config != null ? config.getOrderMapping() : null);
 
-            // 4. 注册
-            Sample saved = sampleService.register(sample);
+            // 4. 注册（条码重复时返回已有 Sample，同一标本多次下单场景）
+            String barcode = sample.getBarcode();
+            Sample saved;
+            if (barcode != null && !barcode.isBlank()) {
+                Sample existing = sampleService.getByBarcodeOrNull(barcode);
+                if (existing != null) {
+                    log.info("Sample already exists for barcode={}, treating as multi-order for same specimen. sampleId={}",
+                            barcode, existing.getSampleId());
+                    return existing;
+                }
+            }
+            saved = sampleService.register(sample);
             log.info("Sample created from LIS order: sampleId={}, barcode={}",
                     saved.getSampleId(), saved.getBarcode());
             return saved;

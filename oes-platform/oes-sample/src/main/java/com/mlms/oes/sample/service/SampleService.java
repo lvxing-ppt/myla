@@ -45,6 +45,11 @@ public interface SampleService extends IService<Sample> {
     Sample getByBarcode(String barcode);
 
     /**
+     * 根据条码查询样本，不存在返回 null（不抛异常）。
+     */
+    Sample getByBarcodeOrNull(String barcode);
+
+    /**
      * 根据业务编号（sampleId）查询样本。
      *
      * @param sampleId 样本业务编号

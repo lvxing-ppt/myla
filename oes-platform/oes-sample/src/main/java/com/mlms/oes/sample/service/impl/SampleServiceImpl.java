@@ -201,11 +201,16 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
      */
     @Override
     public Sample getByBarcode(String barcode) {
-        Sample sample = lambdaQuery().eq(Sample::getBarcode, barcode).one();
+        Sample sample = getByBarcodeOrNull(barcode);
         if (sample == null) {
             throw new BusinessException(ResultCode.SAMPLE_NOT_FOUND);
         }
         return sample;
+    }
+
+    @Override
+    public Sample getByBarcodeOrNull(String barcode) {
+        return lambdaQuery().eq(Sample::getBarcode, barcode).one();
     }
 
     /**
