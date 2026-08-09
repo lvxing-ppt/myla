@@ -71,7 +71,7 @@ public class LisInboundServer implements DisposableBean {
      */
     private void startForHospital(LisConfig cfg) {
         try {
-            int port = extractPort(cfg.getChannelConfig());
+            int port = extractPort(cfg.getInboundConfig());
             ServerSocket ss = new ServerSocket(port);
             servers.put(cfg.getHospitalCode(), ss);
 
@@ -205,7 +205,7 @@ public class LisInboundServer implements DisposableBean {
     }
 
     /**
-     * 从 channel_config JSON 提取端口号。
+     * 从 inbound_config JSON 提取端口号。
      */
     private int extractPort(String channelConfig) {
         try {

@@ -34,9 +34,9 @@ public class Hl7MllpSender implements LisOutboundSender {
     @Override
     public SendResult send(OutboundMessage msg, LisConfig config) {
         try {
-            String channelCfgJson = config.getChannelConfig();
+            String channelCfgJson = config.getOutboundConfig();
             if (channelCfgJson == null || channelCfgJson.isBlank()) {
-                return SendResult.fail("channel_config is empty");
+                return SendResult.fail("outbound_config is empty");
             }
 
             @SuppressWarnings("unchecked")
@@ -83,7 +83,7 @@ public class Hl7MllpSender implements LisOutboundSender {
     @Override
     public boolean testConnection(LisConfig config) {
         try {
-            String channelCfgJson = config.getChannelConfig();
+            String channelCfgJson = config.getOutboundConfig();
             if (channelCfgJson == null) return false;
             @SuppressWarnings("unchecked")
             Map<String, Object> cfg = jsonMapper.readValue(channelCfgJson, Map.class);

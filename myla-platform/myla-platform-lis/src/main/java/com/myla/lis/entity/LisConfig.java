@@ -25,8 +25,11 @@ public class LisConfig {
     /** 通信通道类型，如 HL7、ASTM、HTTP 等 */
     private String channelType;
 
-    /** 通道配置参数（JSON 格式），包含连接地址、端口、认证信息等 */
-    private String channelConfig;
+    /** 入站通道配置（JSON 格式），包含监听端口等。入站：MyLA 本机监听，LIS 主动连接 */
+    private String inboundConfig;
+
+    /** 出站通道配置（JSON 格式），包含 LIS 服务器 IP、端口、URL 等。出站：MyLA 主动连接医院 LIS */
+    private String outboundConfig;
 
     /** 医嘱映射规则（JSON 格式），将 HIS 医嘱编码映射为 LIS 检验项目编码 */
     private String orderMapping;
