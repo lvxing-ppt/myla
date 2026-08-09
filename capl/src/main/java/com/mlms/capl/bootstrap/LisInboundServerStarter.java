@@ -130,7 +130,7 @@ public class LisInboundServerStarter implements DisposableBean {
             String[] segs = hl7.split("\r|\n");
             if (segs.length > 0 && segs[0].startsWith("MSH")) {
                 String[] fields = segs[0].split("\\|");
-                if (fields.length > 9) return fields[9];
+                if (fields.length > 8) return fields[8]; // MSH-9 (0-indexed)
             }
         } catch (Exception ignored) {}
         return "UNKNOWN";
@@ -141,7 +141,7 @@ public class LisInboundServerStarter implements DisposableBean {
             String[] segs = hl7.split("\r|\n");
             if (segs.length > 0 && segs[0].startsWith("MSH")) {
                 String[] fields = segs[0].split("\\|");
-                if (fields.length > 10) return fields[10];
+                if (fields.length > 9) return fields[9]; // MSH-10 (0-indexed)
             }
         } catch (Exception ignored) {}
         return "";
@@ -153,11 +153,11 @@ public class LisInboundServerStarter implements DisposableBean {
             String[] segs = request.split("\r|\n");
             if (segs.length > 0 && segs[0].startsWith("MSH")) {
                 String[] f = segs[0].split("\\|");
-                if (f.length > 3) msh3 = f[3];
-                if (f.length > 4) msh4 = f[4];
-                if (f.length > 5) msh5 = f[5];
-                if (f.length > 6) msh6 = f[6];
-                if (f.length > 10) msh10 = f[10];
+                if (f.length > 2) msh3 = f[2];  // MSH-3 (0-idx)
+                if (f.length > 3) msh4 = f[3];  // MSH-4
+                if (f.length > 4) msh5 = f[4];  // MSH-5
+                if (f.length > 5) msh6 = f[5];  // MSH-6
+                if (f.length > 9) msh10 = f[9]; // MSH-10
             }
         } catch (Exception ignored) {}
 

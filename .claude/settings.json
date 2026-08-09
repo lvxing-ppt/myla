@@ -10,7 +10,9 @@
       "Bash(awk '{print $5}')",
       "Bash(timeout 12 C:/Users/Administrator/.m2/wrapper/dists/apache-maven-3.9.7-bin/c1976043/apache-maven-3.9.7/bin/mvn spring-boot:run -pl oes-server --no-transfer-progress)",
       "Bash(C:/Users/Administrator/.m2/wrapper/dists/apache-maven-3.9.7-bin/c1976043/apache-maven-3.9.7/bin/mvn spring-boot:run -pl oes-server --no-transfer-progress)",
-      "Bash(awk '{print $NF}')"
+      "Bash(awk '{print $NF}')",
+      "Bash(powershell -Command \"Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(cmd //c \"taskkill /F /IM java.exe\")"
     ]
   }
 }

@@ -1,15 +1,14 @@
 package com.mlms.capl.bootstrap;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mlms.oes.gateway.core.context.DriverConfig;
-import com.mlms.oes.gateway.core.hub.InstrumentHub;
-import com.mlms.oes.gateway.core.spi.InstrumentDriver;
-import com.mlms.oes.gateway.core.spi.DataEventListener;
 import com.mlms.capl.config.LisCommProperties;
 import com.mlms.capl.config.LisCommProperties.InstrumentProps;
 import com.mlms.capl.config.LisCommProperties.ChannelProps;
+import com.mlms.oes.gateway.core.context.DriverConfig;
+import com.mlms.oes.gateway.core.hub.InstrumentHub;
+import com.mlms.oes.gateway.core.spi.InstrumentDriver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -18,28 +17,23 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 通讯层启动引导器。
- * <p>
- * 启动时加载 YAML 配置的仪器驱动 + LIS 入站监听。
- * 替代原来 oes-server 中的 GatewayBootstrap + LisInboundServer 的配置读取部分。
- * </p>
+ * 启动 LIS 入站监听 + 仪器驱动（可选）。
  */
 @Slf4j
 @Component
 public class CommBootstrap implements CommandLineRunner {
 
-    private final InstrumentHub hub;
+    @Autowired(required = false)
+    private InstrumentHub hub;
     private final LisCommProperties properties;
     private final RabbitTemplate rabbitTemplate;
     private final LisInboundServerStarter inboundStarter;
 
-    /** SPI 驱动缓存 */
     private static final Map<String, InstrumentDriver> DRIVER_CACHE = new ConcurrentHashMap<>();
-    private static final ObjectMapper jsonMapper = new ObjectMapper();
 
-    public CommBootstrap(InstrumentHub hub, LisCommProperties properties,
+    public CommBootstrap(LisCommProperties properties,
                           RabbitTemplate rabbitTemplate,
                           LisInboundServerStarter inboundStarter) {
-        this.hub = hub;
         this.properties = properties;
         this.rabbitTemplate = rabbitTemplate;
         this.inboundStarter = inboundStarter;
@@ -47,8 +41,11 @@ public class CommBootstrap implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // 1. 启动仪器驱动
-        if (!properties.getInstruments().isEmpty()) {
+        // 1. 启动 LIS 入站监听（核心功能）
+        inboundStarter.startAll(properties.getLisInbound());
+
+        // 2. 启动仪器驱动（仅当 InstrumentHub 可用且有配置时）
+        if (hub != null && !properties.getInstruments().isEmpty()) {
             log.info("Loading {} instrument(s) from YAML config", properties.getInstruments().size());
             for (InstrumentProps cfg : properties.getInstruments()) {
                 try {
@@ -57,34 +54,27 @@ public class CommBootstrap implements CommandLineRunner {
                     log.error("Instrument {} failed: {}", cfg.getInstrumentId(), e.getMessage(), e);
                 }
             }
+        } else if (!properties.getInstruments().isEmpty()) {
+            log.warn("{} instrument(s) configured but InstrumentHub not available (no datasource?)",
+                    properties.getInstruments().size());
         }
 
-        // 2. 启动 LIS 入站监听
-        inboundStarter.startAll(properties.getLisInbound());
-
-        log.info("CommBootstrap complete: {} instrument(s), {} LIS inbound(s)",
-                properties.getInstruments().size(), properties.getLisInbound().size());
+        log.info("CommBootstrap complete: {} LIS inbound(s), {} instrument(s)",
+                properties.getLisInbound().size(), properties.getInstruments().size());
     }
 
     private void bootInstrument(InstrumentProps cfg) {
         String instrumentId = cfg.getInstrumentId();
         log.info("--- Loading instrument: {} (driver={}) ---", instrumentId, cfg.getDriverId());
 
-        // 1. SPI 发现并创建驱动实例
         InstrumentDriver driver = createDriver(cfg.getDriverId());
-
-        // 2. 构建 DriverConfig
         DriverConfig config = toDriverConfig(cfg);
-
-        // 3. 创建 MQ 发布器 (替代 ResultPersistenceService)
-        DataEventListener publisher = new InstrumentResultPublisher(rabbitTemplate);
+        InstrumentResultPublisher publisher = new InstrumentResultPublisher(rabbitTemplate);
         driver.registerListener(publisher);
-
-        // 4. 加载到 Hub 并启动（注意：不创建 DefaultDriverContext，因为没有 DB/Redis）
         hub.loadDriver(driver, config, null);
         hub.startDriver(instrumentId);
 
-        log.info("--- Instrument {} started, listening on port {} ---", instrumentId, cfg.getChannel().getPort());
+        log.info("--- Instrument {} started on port {} ---", instrumentId, cfg.getChannel().getPort());
     }
 
     @SuppressWarnings("unchecked")
@@ -100,15 +90,9 @@ public class CommBootstrap implements CommandLineRunner {
             }
         }
         InstrumentDriver driver = DRIVER_CACHE.get(driverId);
-        if (driver == null) {
-            throw new IllegalArgumentException(
-                    "Driver not found: " + driverId + ". Ensure it's registered in META-INF/services.");
-        }
-        try {
-            return driver.getClass().getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            throw new RuntimeException("Cannot create driver instance: " + driverId, e);
-        }
+        if (driver == null) throw new IllegalArgumentException("Driver not found: " + driverId);
+        try { return driver.getClass().getDeclaredConstructor().newInstance(); }
+        catch (Exception e) { throw new RuntimeException("Cannot create driver: " + driverId, e); }
     }
 
     private DriverConfig toDriverConfig(InstrumentProps cfg) {
@@ -118,20 +102,13 @@ public class CommBootstrap implements CommandLineRunner {
         config.setSplitterType(cfg.getSplitterType());
         config.setParserType(cfg.getParserType());
         config.setProperties(cfg.getProperties());
-
         ChannelProps ch = cfg.getChannel();
-        DriverConfig.ChannelConfig channelConfig = new DriverConfig.ChannelConfig();
-        channelConfig.setType(ch.getType());
-        channelConfig.setHost(ch.getHost());
-        channelConfig.setPort(ch.getPort());
-        channelConfig.setDirectory(ch.getDirectory());
-        channelConfig.setFilePattern(ch.getFilePattern());
-        channelConfig.setPollIntervalMs(ch.getPollIntervalMs());
-        channelConfig.setSerialPort(ch.getSerialPort());
-        channelConfig.setBaudRate(ch.getBaudRate());
-        channelConfig.setReconnectDelayMs(ch.getReconnectDelayMs());
-        config.setChannel(channelConfig);
-
+        DriverConfig.ChannelConfig cc = new DriverConfig.ChannelConfig();
+        cc.setType(ch.getType()); cc.setHost(ch.getHost()); cc.setPort(ch.getPort());
+        cc.setDirectory(ch.getDirectory()); cc.setFilePattern(ch.getFilePattern());
+        cc.setPollIntervalMs(ch.getPollIntervalMs()); cc.setSerialPort(ch.getSerialPort());
+        cc.setBaudRate(ch.getBaudRate()); cc.setReconnectDelayMs(ch.getReconnectDelayMs());
+        config.setChannel(cc);
         return config;
     }
 }

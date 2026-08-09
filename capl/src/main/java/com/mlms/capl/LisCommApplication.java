@@ -2,7 +2,8 @@ package com.mlms.capl;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -13,6 +14,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * </p>
  */
 @SpringBootApplication
+@ComponentScan(basePackages = "com.mlms",
+    excludeFilters = @ComponentScan.Filter(
+        type = FilterType.REGEX,
+        pattern = "com\\.mlms\\.oes\\.gateway\\.devicemgmt\\..*"))
 @EnableScheduling
 public class LisCommApplication {
 
