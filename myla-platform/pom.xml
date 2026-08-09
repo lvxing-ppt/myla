@@ -18,6 +18,7 @@
         <module>myla-platform-result</module>
         <module>myla-platform-workflow</module>
         <module>myla-platform-lis</module>
+        <module>myla-platform-lis-comm</module>
         <module>myla-platform-report</module>
         <module>myla-platform-notification</module>
         <module>myla-platform-admin</module>

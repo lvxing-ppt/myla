@@ -1,0 +1,35 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: lis-comm
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+
+# 通讯层配置
+lis-comm:
+  instruments: []
+  #  - instrumentId: VITEK2-001
+  #    driverId: vitek2-v1.0
+  #    channel:
+  #      type: TCP
+  #      host: 192.168.1.100
+  #      port: 2000
+  #    splitterType: ASTM
+  #    parserType: vitek2-parser
+
+  lis-inbound: []
+  #  - hospitalCode: DEMO_HOSPITAL
+  #    port: 2575
+
+  lis-outbound: []
+  #  - hospitalCode: DEMO_HOSPITAL
+  #    channelType: HL7
+  #    channelConfig:
+  #      host: 10.0.1.5
+  #      port: 2576
+  #    ackTimeoutSec: 30

@@ -167,6 +167,16 @@ public class RabbitMqConfig {
     }
 
     /**
+     * LIS 入站消息队列。
+     * <p>通讯层（lis-comm）发布，业务层（InboundMessageConsumer）消费，
+     * 解析 HL7 并创建 Sample。</p>
+     */
+    @Bean
+    public Queue lisInboundQueue() {
+        return QueueBuilder.durable("lis.inbound").build();
+    }
+
+    /**
      * 短信通知队列。
      * <p>消费者负责通过短信网关发送通知。</p>
      */
@@ -250,6 +260,14 @@ public class RabbitMqConfig {
     @Bean
     public Binding outboundMsgBinding() {
         return BindingBuilder.bind(outboundMsgQueue()).to(lisExchange()).with("outbound.msg");
+    }
+
+    /**
+     * 绑定：lis.inbound 路由键 -> lisInboundQueue（LIS 入站消息）。
+     */
+    @Bean
+    public Binding lisInboundBinding() {
+        return BindingBuilder.bind(lisInboundQueue()).to(lisExchange()).with("lis.inbound");
     }
 
     /**

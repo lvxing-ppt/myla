@@ -1,28 +1,31 @@
 package com.myla.lis.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.myla.lis.entity.LisConfig;
 import com.myla.lis.entity.OutboundMessage;
+import com.myla.lis.mapper.LisConfigMapper;
 import com.myla.lis.mapper.OutboundMessageMapper;
 import com.myla.lis.service.LisGatewayService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
- * MYLA 系统 LIS 网关服务实现类。
- * 实现与外部 LIS 系统通信的业务逻辑。
- *
- * 发送结果流程：
- * 1. 生成唯一消息ID（UUID 去除连字符）
- * 2. 构建出站消息实体，设置默认状态为 PENDING、重试次数为 0、最大重试次数为 3
- * 3. 持久化消息到数据库，后续由消息消费者异步发送
- *
- * 重试消息流程：
- * 1. 根据消息ID查询消息记录
- * 2. 校验重试次数是否未超过上限
- * 3. 重置状态为 PENDING，递增重试计数，设置下次重试时间为 1 分钟后
+ * LIS 网关服务实现。
+ * <p>
+ * sendResult 流程：
+ * <ol>
+ *   <li>查 lis_config 获取该医院的通道配置</li>
+ *   <li>持久化 OutboundMessage 到 DB（状态追踪）</li>
+ *   <li>发布自包含 JSON 到 outbound.msg（通讯层消费并真实发送）</li>
+ * </ol>
+ * </p>
  */
 @Slf4j
 @Service
@@ -30,19 +33,17 @@ import java.util.UUID;
 public class LisGatewayServiceImpl implements LisGatewayService {
 
     private final OutboundMessageMapper messageMapper;
+    private final LisConfigMapper configMapper;
+    private final RabbitTemplate rabbitTemplate;
+    private static final ObjectMapper jsonMapper = new ObjectMapper();
 
-    /**
-     * 发送检验结果到指定医院的 LIS 系统。
-     * 构建出站消息并持久化到数据库，设置初始状态为 PENDING。
-     * 实际发送由 RabbitMQ 消费者（OutboundMessageConsumer）异步执行。
-     *
-     * @param hospitalCode   目标医院编码
-     * @param messageContent 消息内容（HL7/ASTM 格式）
-     */
     @Override
     public void sendResult(String hospitalCode, String messageContent) {
+        String messageId = UUID.randomUUID().toString().replace("-", "");
+
+        // 1. 持久化到 DB（用于追踪、重试、审计）
         OutboundMessage msg = new OutboundMessage();
-        msg.setMessageId(UUID.randomUUID().toString().replace("-", ""));
+        msg.setMessageId(messageId);
         msg.setHospitalCode(hospitalCode);
         msg.setMessageType("RESULT");
         msg.setMessageContent(messageContent);
@@ -51,16 +52,39 @@ public class LisGatewayServiceImpl implements LisGatewayService {
         msg.setMaxRetries(3);
         messageMapper.insert(msg);
 
-        log.info("LIS outbound message queued: messageId={}, hospitalCode={}", msg.getMessageId(), hospitalCode);
+        // 2. 加载医院 LIS 配置，获取通道参数
+        LisConfig config = configMapper.selectByHospitalCode(hospitalCode);
+        String channelType = config != null ? config.getChannelType() : "HL7";
+        String outboundConfigJson = config != null ? config.getOutboundConfig() : null;
+        int ackTimeoutSec = config != null && config.getAckTimeoutSec() != null ? config.getAckTimeoutSec() : 30;
+
+        // 3. 构建自包含 JSON 消息 → 发 MQ（通讯层消费）
+        Map<String, Object> mqMsg = new HashMap<>();
+        mqMsg.put("messageId", messageId);
+        mqMsg.put("hospitalCode", hospitalCode);
+        mqMsg.put("channelType", channelType);
+        mqMsg.put("messageContent", messageContent);
+        mqMsg.put("ackTimeoutSec", ackTimeoutSec);
+
+        // 解析 channelConfig JSON
+        if (outboundConfigJson != null && !outboundConfigJson.isBlank()) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> channelCfg = jsonMapper.readValue(outboundConfigJson, Map.class);
+                mqMsg.put("channelConfig", channelCfg);
+            } catch (Exception e) {
+                log.warn("Failed to parse outbound_config for hospital={}: {}", hospitalCode, e.getMessage());
+                mqMsg.put("channelConfig", Map.of("host", "localhost", "port", 2575));
+            }
+        } else {
+            mqMsg.put("channelConfig", Map.of("host", "localhost", "port", 2575));
+        }
+
+        rabbitTemplate.convertAndSend("myla.lis", "outbound.msg", mqMsg);
+        log.info("LIS outbound message queued: messageId={}, hospitalCode={}, channelType={}",
+                messageId, hospitalCode, channelType);
     }
 
-    /**
-     * 手动重试发送失败的消息。
-     * 仅当消息存在且重试次数未超过最大限制时才执行重试。
-     * 重试时重置状态为 PENDING，递增重试计数，设置下次重试时间为 1 分钟后。
-     *
-     * @param messageId 消息数据库主键ID
-     */
     @Override
     public void retryMessage(Long messageId) {
         OutboundMessage msg = messageMapper.selectById(messageId);
@@ -69,6 +93,9 @@ public class LisGatewayServiceImpl implements LisGatewayService {
             msg.setRetryCount(msg.getRetryCount() + 1);
             msg.setNextRetryAt(LocalDateTime.now().plusMinutes(1));
             messageMapper.updateById(msg);
+
+            // 重新发送到 MQ
+            sendResult(msg.getHospitalCode(), msg.getMessageContent());
             log.info("LIS message retry scheduled: messageId={}, retryCount={}", msg.getMessageId(), msg.getRetryCount());
         }
     }
