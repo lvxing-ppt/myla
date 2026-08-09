@@ -1,7 +1,9 @@
 package com.mlms.oes.lis.inbound;
 
 import com.mlms.oes.lis.entity.LisInboundMessage;
+import com.mlms.oes.lis.entity.LisOrder;
 import com.mlms.oes.lis.mapper.LisInboundMessageMapper;
+import com.mlms.oes.lis.mapper.LisOrderMapper;
 import com.mlms.oes.sample.entity.Sample;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -22,11 +24,14 @@ public class InboundMessageConsumer {
 
     private final LisInboundServiceImpl inboundService;
     private final LisInboundMessageMapper inboundMsgMapper;
+    private final LisOrderMapper orderMapper;
 
     public InboundMessageConsumer(LisInboundServiceImpl inboundService,
-                                   LisInboundMessageMapper inboundMsgMapper) {
+                                   LisInboundMessageMapper inboundMsgMapper,
+                                   LisOrderMapper orderMapper) {
         this.inboundService = inboundService;
         this.inboundMsgMapper = inboundMsgMapper;
+        this.orderMapper = orderMapper;
     }
 
     @RabbitListener(queues = "lis.inbound")
@@ -62,7 +67,18 @@ public class InboundMessageConsumer {
                 Sample sample = inboundService.receiveOrder(hospitalCode, rawBytes, "HL7");
                 entity.setProcessStatus("PROCESSED");
                 entity.setSampleId(sample.getId());
-                log.info("[LIS-IN-BIZ] order created: sampleId={}, barcode={}", sample.getSampleId(), sample.getBarcode());
+
+                // 创建 lis_order 记录（同一标本多条订单不冲突）
+                LisOrder order = new LisOrder();
+                order.setOrderCode(messageControlId);
+                order.setSampleId(sample.getId());
+                order.setHospitalCode(hospitalCode);
+                order.setStatus("RECEIVED");
+                order.setInboundMessageId(entity.getId());
+                orderMapper.insert(order);
+
+                log.info("[LIS-IN-BIZ] order created: sampleId={}, barcode={}, orderId={}",
+                        sample.getSampleId(), sample.getBarcode(), order.getId());
             } else if (messageType != null && messageType.contains("ADT")) {
                 inboundService.receivePatientUpdate(hospitalCode, rawBytes);
                 entity.setProcessStatus("PROCESSED");

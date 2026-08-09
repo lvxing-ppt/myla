@@ -3,6 +3,7 @@ package com.mlms.oes.lis.config;
 import com.mlms.oes.lis.inbound.InboundMessageConsumer;
 import com.mlms.oes.lis.inbound.LisInboundServiceImpl;
 import com.mlms.oes.lis.mapper.LisInboundMessageMapper;
+import com.mlms.oes.lis.mapper.LisOrderMapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -23,7 +24,8 @@ public class LisAutoConfiguration {
     /** LIS 入站 MQ 消费者 — 消费 lis.inbound 队列，解析 HL7 并创建 Sample */
     @Bean
     public InboundMessageConsumer inboundMessageConsumer(LisInboundServiceImpl inboundService,
-                                                          LisInboundMessageMapper inboundMsgMapper) {
-        return new InboundMessageConsumer(inboundService, inboundMsgMapper);
+                                                          LisInboundMessageMapper inboundMsgMapper,
+                                                          LisOrderMapper orderMapper) {
+        return new InboundMessageConsumer(inboundService, inboundMsgMapper, orderMapper);
     }
 }
