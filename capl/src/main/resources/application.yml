@@ -18,6 +18,12 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:root}
     password: ${RABBITMQ_PASS:root}
+    publisher-confirm-type: correlated
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASS:root}
+    client-type: lettuce
 
 # 通讯层配置（以下为本地默认值，Nacos 中同名配置会覆盖此处）
 lis-comm:
