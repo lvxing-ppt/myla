@@ -135,8 +135,19 @@ public class ResultPersistenceService {
         }
     }
 
+    /**
+     * 定时补发失败的 outbox 消息。
+     * <p>使用 Redis SETNX 分布式锁保证多实例下只有一个执行，
+     * 锁自动过期 25 秒（小于 fixedDelay 的 30 秒）。</p>
+     */
     @Scheduled(fixedDelay = 30_000)
     public void retryOutboxMessages() {
+        // 分布式锁：多实例部署时只有一个执行
+        String lockKey = "myla:lock:outbox-retry";
+        Boolean locked = redisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", java.time.Duration.ofSeconds(25));
+        if (locked == null || !locked) return;
+
         try {
             Set<String> failedIds = redisTemplate.opsForSet().members(OUTBOX_KEY);
             if (failedIds == null || failedIds.isEmpty()) return;
