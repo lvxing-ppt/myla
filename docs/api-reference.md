@@ -1,4 +1,4 @@
-# MyLA API 接口文档
+# MLMS API 接口文档
 
 > v1.0 | 2026-07-04 | Base URL: `http://localhost:8080`
 
@@ -325,8 +325,8 @@ curl -O http://localhost:8080/api/v1/reports/sample/TEST001/excel
 
 启动服务后直接运行：
 ```
-mvn exec:java -pl myla-server -Dexec.classpathScope=test \
-  -Dexec.mainClass=com.myla.server.gateway.FullCycleDemo
+mvn exec:java -pl oes-server -Dexec.classpathScope=test \
+  -Dexec.mainClass=com.mlms.oes.server.gateway.FullCycleDemo
 ```
 
 自动完成：TCP 发数据 → 入库 → 规则 → 审核 → 报告 全流程。

@@ -1,7 +1,7 @@
 @startuml
 
 ' ============================================================
-'  MyLA 微生物实验室中间件平台 — 架构 UML
+'  MLMS 微生物实验室中间件平台 — 架构 UML
 '  包含: 模块结构、网关核心类图、工作流引擎、全链路时序图
 ' ============================================================
 
@@ -11,7 +11,7 @@ skinparam shadowing false
 skinparam defaultFontName Microsoft YaHei
 skinparam defaultFontSize 12
 
-title MyLA 微生物实验室中间件平台 — 架构全景图 (v1.0)\n
+title MLMS 微生物实验室中间件平台 — 架构全景图 (v1.0)\n
 
 ' ============================================================
 '  图 1: 项目模块结构 (Package Diagram)
@@ -19,15 +19,15 @@ title MyLA 微生物实验室中间件平台 — 架构全景图 (v1.0)\n
 
 package "myla (Root POM)" as root #LightGray {
 
-  package "myla-common" as common #E8F5E9 {
-    package "myla-common-core" as common_core #C8E6C9 {
+  package "oes-common" as common #E8F5E9 {
+    package "oes-common-core" as common_core #C8E6C9 {
       [BusinessException]
       [ParseException]
       [ResultCode]
       [R<T>]
       [GlobalExceptionHandler]
     }
-    package "myla-common-api" as common_api #C8E6C9 {
+    package "oes-common-api" as common_api #C8E6C9 {
       [UnifiedResult]
       [AstResultDTO]
       [LabEvent]
@@ -35,15 +35,15 @@ package "myla (Root POM)" as root #LightGray {
       [SampleStatus]
       [CommunicationMode]
     }
-    package "myla-common-security" as common_sec #C8E6C9 {
+    package "oes-common-security" as common_sec #C8E6C9 {
       [JwtTokenProvider]
       [@AuditLog]
     }
   }
 
-  package "myla-platform" as platform #E3F2FD {
+  package "oes-platform" as platform #E3F2FD {
 
-    package "myla-platform-gateway" as gateway #BBDEFB {
+    package "oes-gateway" as gateway #BBDEFB {
       package "gateway-core" as gw_core #90CAF9 {
         [InstrumentHub] <<Component>>
         [DriverContainer]
@@ -76,14 +76,14 @@ package "myla (Root POM)" as root #LightGray {
       }
     }
 
-    package "myla-platform-sample" as sample #BBDEFB {
+    package "oes-sample" as sample #BBDEFB {
       [SampleController]
       [SampleServiceImpl]
       [Sample]
       [SampleMapper]
     }
 
-    package "myla-platform-result" as result #BBDEFB {
+    package "oes-result" as result #BBDEFB {
       [ResultController]
       [ResultServiceImpl]
       [ResultParsedConsumer]
@@ -92,7 +92,7 @@ package "myla (Root POM)" as root #LightGray {
       [RawMessage]
     }
 
-    package "myla-platform-workflow" as workflow #FFF3E0 {
+    package "oes-workflow" as workflow #FFF3E0 {
       [LabEventConsumer]
       [WorkflowEngineImpl]
       [WorkflowRule]
@@ -101,30 +101,30 @@ package "myla (Root POM)" as root #LightGray {
       [LabEventMessage]
     }
 
-    package "myla-platform-lis" as lis #BBDEFB {
+    package "oes-lis" as lis #BBDEFB {
       [LisGatewayServiceImpl]
       [OutboundMessageConsumer]
       [OutboundMessage]
       [LisConfig]
     }
 
-    package "myla-platform-report" as report #BBDEFB {
+    package "oes-report" as report #BBDEFB {
       [ReportController]
       [ReportServiceImpl]
     }
 
-    package "myla-platform-notification" as notif #BBDEFB {
+    package "oes-notification" as notif #BBDEFB {
       [NotificationConsumer]
       [NotificationServiceImpl]
     }
 
-    package "myla-platform-admin" as admin #BBDEFB {
+    package "oes-admin" as admin #BBDEFB {
       [AuthController]
       [UserService]
     }
   }
 
-  package "myla-server (Boot)" as server #FFF9C4 {
+  package "oes-server (Boot)" as server #FFF9C4 {
     [MylaApplication]
     [GatewayBootstrap]
     [DefaultDriverContext]
@@ -134,7 +134,7 @@ package "myla (Root POM)" as root #LightGray {
     [DevMessagingConfig]
   }
 
-  package "myla-web (Vue 3)" as web #F3E5F5 {
+  package "oes-web (Vue 3)" as web #F3E5F5 {
     [仪表盘]
     [样本管理]
     [结果审核]
@@ -142,7 +142,7 @@ package "myla (Root POM)" as root #LightGray {
     [系统管理]
   }
 
-  package "myla-deploy" as deploy #ECEFF1 {
+  package "deploy" as deploy #ECEFF1 {
     [Docker Compose]
     [V1__init_schema.sql]
   }
@@ -498,7 +498,7 @@ end note
 
 @startuml
 
-title MyLA 全链路时序图 — VITEK 2 仪器数据 → 规则引擎 → 报告\n
+title MLMS 全链路时序图 — VITEK 2 仪器数据 → 规则引擎 → 报告\n
 
 skinparam backgroundColor #FEFEFE
 skinparam defaultFontSize 11
@@ -647,7 +647,7 @@ listener --> reviewer : 检验报告.xlsx ✅
 
 @startuml
 
-title MyLA 消息管道 — RabbitMQ 拓扑\n
+title MLMS 消息管道 — RabbitMQ 拓扑\n
 
 skinparam backgroundColor #FEFEFE
 skinparam defaultFontSize 11

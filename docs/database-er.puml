@@ -1,14 +1,14 @@
 @startuml
 
 ' ============================================================
-'  MyLA 数据库 ER 图 — 22 张表, 分 8 个业务域
+'  MLMS 数据库 ER 图 — 22 张表, 分 8 个业务域
 ' ============================================================
 
 skinparam backgroundColor #FEFEFE
 skinparam defaultFontSize 11
 skinparam linetype ortho
 
-title MyLA 微生物实验室中间件 — 数据库实体关系图 (22 Tables)\n
+title MLMS 微生物实验室中间件 — 数据库实体关系图 (22 Tables)\n
 
 left to right direction
 

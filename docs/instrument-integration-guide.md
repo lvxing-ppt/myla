@@ -1,4 +1,4 @@
-# MyLA 仪器接入开发指南
+# MLMS 仪器接入开发指南
 
 > v1.0 | 2026-07-04 | 适用于一期 MVP 框架
 
@@ -6,7 +6,7 @@
 
 ## 1. 架构概述
 
-MyLA 网关采用三层解耦的 SPI 插件架构，新增仪器适配器 = 实现 3 个接口 + 1 个驱动类：
+MLMS 网关采用三层解耦的 SPI 插件架构，新增仪器适配器 = 实现 3 个接口 + 1 个驱动类：
 
 ```
 ┌────────────────────────────────────────────────┐
@@ -37,9 +37,9 @@ MyLA 网关采用三层解耦的 SPI 插件架构，新增仪器适配器 = 实�
 
 | 类 | 适用场景 | 关键参数 |
 |----|---------|---------|
-| [TcpChannel](file://g:/myla/myla-platform/myla-platform-gateway/gateway-channel/src/main/java/com/myla/gateway/channel/TcpChannel.java) | 仪器主动连接推送数据 | `port` — 监听端口 |
-| [NettyTcpChannel](file://g:/myla/myla-platform/myla-platform-gateway/gateway-channel/src/main/java/com/myla/gateway/channel/NettyTcpChannel.java) | 高并发 TCP 场景（NIO） | `port` — 监听端口 |
-| [FileChannel](file://g:/myla/myla-platform/myla-platform-gateway/gateway-channel/src/main/java/com/myla/gateway/channel/FileChannel.java) | 仪器通过文件导出数据 | `directory`, `filePattern`, `pollIntervalMs` |
+| [TcpChannel](file://g:/myla/oes-platform/oes-gateway/gateway-channel/src/main/java/com/myla/gateway/channel/TcpChannel.java) | 仪器主动连接推送数据 | `port` — 监听端口 |
+| [NettyTcpChannel](file://g:/myla/oes-platform/oes-gateway/gateway-channel/src/main/java/com/myla/gateway/channel/NettyTcpChannel.java) | 高并发 TCP 场景（NIO） | `port` — 监听端口 |
+| [FileChannel](file://g:/myla/oes-platform/oes-gateway/gateway-channel/src/main/java/com/myla/gateway/channel/FileChannel.java) | 仪器通过文件导出数据 | `directory`, `filePattern`, `pollIntervalMs` |
 
 **选择指南**：
 - 仪器作为 TCP client 推送数据 → `TcpChannel`
@@ -50,8 +50,8 @@ MyLA 网关采用三层解耦的 SPI 插件架构，新增仪器适配器 = 实�
 
 | 类 | 适用协议 | 帧边界 |
 |----|---------|--------|
-| [AstmSplitter](file://g:/myla/myla-platform/myla-platform-gateway/gateway-splitter/src/main/java/com/myla/gateway/splitter/AstmSplitter.java) | ASTM E1381/E1394 | STX(0x02)...ETX(0x03)/ETB(0x17) |
-| [Hl7Splitter](file://g:/myla/myla-platform/myla-platform-gateway/gateway-splitter/src/main/java/com/myla/gateway/splitter/Hl7Splitter.java) | HL7 v2.x MLLP | VT(0x0B)...FS(0x1C)+CR(0x0D) |
+| [AstmSplitter](file://g:/myla/oes-platform/oes-gateway/gateway-splitter/src/main/java/com/myla/gateway/splitter/AstmSplitter.java) | ASTM E1381/E1394 | STX(0x02)...ETX(0x03)/ETB(0x17) |
+| [Hl7Splitter](file://g:/myla/oes-platform/oes-gateway/gateway-splitter/src/main/java/com/myla/gateway/splitter/Hl7Splitter.java) | HL7 v2.x MLLP | VT(0x0B)...FS(0x1C)+CR(0x0D) |
 
 如果仪器数据是完整帧（比如每行一个 JSON，换行分隔），可以不用 Splitter（直接在 Driver 里处理 raw bytes）。
 
@@ -59,7 +59,7 @@ MyLA 网关采用三层解耦的 SPI 插件架构，新增仪器适配器 = 实�
 
 | 类 | 适用场景 |
 |----|---------|
-| [Vitek2Parser](file://g:/myla/myla-platform/myla-platform-gateway/gateway-drivers/driver-vitek2/src/main/java/com/myla/gateway/driver/vitek2/Vitek2Parser.java) | VITEK 2 ASTM 格式 (O\|/R\| 管道分隔) |
+| [Vitek2Parser](file://g:/myla/oes-platform/oes-gateway/gateway-drivers/driver-vitek2/src/main/java/com/myla/gateway/driver/vitek2/Vitek2Parser.java) | VITEK 2 ASTM 格式 (O\|/R\| 管道分隔) |
 
 如果仪器是其他格式，需要自己实现 `DataParser` 接口。
 
@@ -79,7 +79,7 @@ MyLA 网关采用三层解耦的 SPI 插件架构，新增仪器适配器 = 实�
 以接入 BD BACTEC FX 血培养仪（举例）为例：
 
 ```
-myla-platform/myla-platform-gateway/gateway-drivers/
+oes-platform/oes-gateway/gateway-drivers/
 └── driver-bactec/
     ├── pom.xml
     └── src/main/java/com/myla/gateway/driver/bactec/
@@ -92,7 +92,7 @@ myla-platform/myla-platform-gateway/gateway-drivers/
 <project xmlns="http://maven.apache.org/POM/4.0.0" ...>
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.myla</groupId>
+        <groupId>com.mlms.oes</groupId>
         <artifactId>gateway-drivers</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
@@ -101,17 +101,17 @@ myla-platform/myla-platform-gateway/gateway-drivers/
 
     <dependencies>
         <dependency>
-            <groupId>com.myla</groupId>
+            <groupId>com.mlms.oes</groupId>
             <artifactId>gateway-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.myla</groupId>
+            <groupId>com.mlms.oes</groupId>
             <artifactId>gateway-channel</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.myla</groupId>
+            <groupId>com.mlms.oes</groupId>
             <artifactId>gateway-splitter</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -126,7 +126,7 @@ myla-platform/myla-platform-gateway/gateway-drivers/
 
 ### Step 3: 实现 InstrumentDriver
 
-参考 [Vitek2Driver.java](file://g:/myla/myla-platform/myla-platform-gateway/gateway-drivers/driver-vitek2/src/main/java/com/myla/gateway/driver/vitek2/Vitek2Driver.java)，核心模板：
+参考 [Vitek2Driver.java](file://g:/myla/oes-platform/oes-gateway/gateway-drivers/driver-vitek2/src/main/java/com/myla/gateway/driver/vitek2/Vitek2Driver.java)，核心模板：
 
 ```java
 @Slf4j
@@ -230,13 +230,13 @@ public class BactecDriver implements InstrumentDriver {
 
 ```java
 // GatewayBootstrap.java 的 createDriver() 方法中添加
-case "bactec-v1.0" -> new com.myla.gateway.driver.bactec.BactecDriver();
+case "bactec-v1.0" -> new com.mlms.oes.gateway.driver.bactec.BactecDriver();
 ```
 
-**4b. 在 myla-server pom.xml 添加依赖：**
+**4b. 在 oes-server pom.xml 添加依赖：**
 ```xml
 <dependency>
-    <groupId>com.myla</groupId>
+    <groupId>com.mlms.oes</groupId>
     <artifactId>driver-bactec</artifactId>
     <version>${project.version}</version>
 </dependency>
@@ -398,5 +398,5 @@ InstrumentDriver (编排者)
 - [ ] Driver 类实现了 `InstrumentDriver` 接口的 10 个方法
 - [ ] 在 `GatewayBootstrap.createDriver()` 注册了 driverId 映射
 - [ ] 在 `application-dev.yml` 添加了仪器配置
-- [ ] 在 `myla-server/pom.xml` 添加了依赖
+- [ ] 在 `oes-server/pom.xml` 添加了依赖
 - [ ] 启动服务，仪器连接测试端口验证

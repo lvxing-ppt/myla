@@ -3,16 +3,17 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.myla</groupId>
-    <artifactId>myla</artifactId>
+    <groupId>com.mlms</groupId>
+    <artifactId>mlms</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>MYLA 微生物实验室自动化平台 (Root)</name>
+    <name>MLMS 微生物实验室自动化平台 (Root)</name>
     <description>根 POM — Spring Boot 3.2 + JDK 17 + Maven 多模块，依赖版本统一管理</description>
     <modules>
-        <module>myla-common</module>
-        <module>myla-platform</module>
-        <module>myla-server</module>
+        <module>oes-common</module>
+        <module>oes-platform</module>
+        <module>capl</module>
+        <module>oes-server</module>
     </modules>
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -29,8 +30,8 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>com.myla</groupId>
-                <artifactId>myla-common</artifactId>
+                <groupId>com.mlms</groupId>
+                <artifactId>oes-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
