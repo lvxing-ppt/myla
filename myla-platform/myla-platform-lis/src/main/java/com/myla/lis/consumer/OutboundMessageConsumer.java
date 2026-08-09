@@ -1,7 +1,11 @@
 package com.myla.lis.consumer;
 
+import com.myla.lis.entity.LisConfig;
 import com.myla.lis.entity.OutboundMessage;
+import com.myla.lis.mapper.LisConfigMapper;
 import com.myla.lis.mapper.OutboundMessageMapper;
+import com.myla.lis.outbound.LisOutboundSender;
+import com.myla.lis.outbound.LisOutboundSender.SendResult;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,20 +17,24 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- * MYLA 系统 LIS 出站消息消费者。
- * 负责监听 RabbitMQ 出站消息队列，处理向外发送的 LIS 消息。
+ * LIS 出站消息消费者。
+ * <p>
+ * 监听 outbound.msg 队列，根据 lis_config.channel_type 选择对应的
+ * LisOutboundSender（HL7 MLLP / ASTM TCP / HTTP）实际发送消息到外部 LIS。
+ * </p>
  *
- * 消息处理流程：
- * 1. 从队列 "outbound.msg" 消费出站消息
- * 2. 尝试发送消息到外部 LIS 系统（生产环境通过 HL7/ASTM/HTTP 通道）
- * 3. 发送成功后更新状态为 "SENT" 并手动确认（ACK）
- * 4. 发送失败后更新错误信息并根据重试策略处理
- *
- * 错误处理策略：
- * - 未超过最大重试次数：递增重试计数，设置重试时间，重新入队（requeue）
- * - 已达到最大重试次数：拒绝消息且不重新入队，消息进入死信队列（DLQ）
+ * <h3>发送流程：</h3>
+ * <ol>
+ *   <li>从队列 "outbound.msg" 消费出站消息</li>
+ *   <li>查 lis_config 获取该医院的通道配置</li>
+ *   <li>选择匹配的 LisOutboundSender</li>
+ *   <li>调用 sender.send() 真实发送</li>
+ *   <li>成功 → SENT + ACK</li>
+ *   <li>失败 → 重试 / DLQ</li>
+ * </ol>
  */
 @Slf4j
 @Component
@@ -34,50 +42,77 @@ import java.time.LocalDateTime;
 public class OutboundMessageConsumer {
 
     private final OutboundMessageMapper messageMapper;
+    private final LisConfigMapper configMapper;
+    private final List<LisOutboundSender> senders;
 
-    /**
-     * 处理出站 LIS 消息。
-     * 监听队列 "outbound.msg"，消费出站消息并尝试发送到外部 LIS 系统。
-     * 发送成功后更新消息状态为 SENT 并手动确认；
-     * 发送失败后根据重试策略决定重新入队或转入死信队列。
-     *
-     * @param msg         出站消息实体，包含消息内容和目标医院编码
-     * @param message     RabbitMQ 原始消息对象
-     * @param channel     RabbitMQ 通道，用于手动确认（ACK/NACK）
-     * @param deliveryTag RabbitMQ 投递标签，用于精确定位消息
-     */
     @RabbitListener(queues = "outbound.msg")
     public void onOutboundMessage(OutboundMessage msg, Message message, Channel channel,
                                    @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
         try {
-            log.info("Sending outbound LIS message: messageId={}, hospitalCode={}",
-                msg.getMessageId(), msg.getHospitalCode());
+            log.info("Processing outbound message: messageId={}, hospital={}, type={}",
+                    msg.getMessageId(), msg.getHospitalCode(), msg.getMessageType());
 
-            // In production, send to LIS via configured channel (HL7/ASTM/HTTP)
-            msg.setSendStatus("SENT");
-            msg.setSentAt(LocalDateTime.now());
-            messageMapper.updateById(msg);
+            // 1. 加载 LIS 配置
+            LisConfig config = configMapper.selectByHospitalCode(msg.getHospitalCode());
+            if (config == null) {
+                log.error("No LIS config for hospital={}, sending to DLQ", msg.getHospitalCode());
+                channel.basicNack(deliveryTag, false, false); // DLQ
+                return;
+            }
 
-            channel.basicAck(deliveryTag, false);
+            // 2. 选择匹配的 sender
+            LisOutboundSender sender = senders.stream()
+                    .filter(s -> s.getChannelType().equalsIgnoreCase(config.getChannelType()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (sender == null) {
+                log.warn("No sender for channel_type={}, marking as SENT (no-op)", config.getChannelType());
+                msg.setSendStatus("SENT");
+                msg.setSentAt(LocalDateTime.now());
+                messageMapper.updateById(msg);
+                channel.basicAck(deliveryTag, false);
+                return;
+            }
+
+            // 3. 真实发送
+            SendResult result = sender.send(msg, config);
+
+            if (result.isSuccess()) {
+                msg.setSendStatus("SENT");
+                msg.setSentAt(LocalDateTime.now());
+                messageMapper.updateById(msg);
+                channel.basicAck(deliveryTag, false);
+                log.info("Outbound message sent: messageId={}", msg.getMessageId());
+            } else {
+                log.error("Send failed: messageId={}, error={}", msg.getMessageId(), result.getError());
+                msg.setSendStatus("FAILED");
+                msg.setLastError(result.getError());
+                messageMapper.updateById(msg);
+                handleFailure(msg, channel, deliveryTag);
+            }
         } catch (Exception e) {
-            log.error("Failed to send LIS message {}: {}", msg.getMessageId(), e.getMessage());
+            log.error("Outbound processing error: messageId={}, error={}",
+                    msg.getMessageId(), e.getMessage());
             msg.setSendStatus("FAILED");
             msg.setLastError(e.getMessage());
             messageMapper.updateById(msg);
+            handleFailure(msg, channel, deliveryTag);
+        }
+    }
 
-            try {
-                // Send to DLQ after max retries
-                if (msg.getRetryCount() >= msg.getMaxRetries()) {
-                    channel.basicNack(deliveryTag, false, false); // dead letter
-                } else {
-                    msg.setRetryCount(msg.getRetryCount() + 1);
-                    msg.setNextRetryAt(LocalDateTime.now().plusMinutes(1));
-                    messageMapper.updateById(msg);
-                    channel.basicNack(deliveryTag, false, true); // requeue
-                }
-            } catch (IOException ex) {
-                log.error("Failed to nack message", ex);
+    private void handleFailure(OutboundMessage msg, Channel channel, long deliveryTag) {
+        try {
+            if (msg.getRetryCount() >= msg.getMaxRetries()) {
+                channel.basicNack(deliveryTag, false, false); // → DLQ
+            } else {
+                msg.setRetryCount(msg.getRetryCount() + 1);
+                msg.setNextRetryAt(LocalDateTime.now().plusMinutes(1));
+                messageMapper.updateById(msg);
+                channel.basicNack(deliveryTag, false, true); // requeue
             }
+        } catch (IOException e) {
+            log.error("Failed to nack message", e);
         }
     }
 }
