@@ -1,4 +1,8 @@
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/myla?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
     username: root
@@ -24,6 +28,10 @@ spring:
     host: 127.0.0.1
     port: 6379
     password: root
+    lettuce:
+      pool:
+        enabled: true
+    client-type: lettuce
 
 logging:
   level:

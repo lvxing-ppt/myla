@@ -10,10 +10,10 @@ import com.mlms.oes.result.mapper.OrganismResultMapper;
 import com.mlms.oes.sample.entity.Sample;
 import com.mlms.oes.sample.mapper.SampleMapper;
 import com.mlms.oes.workflow.model.LabEventMessage;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -36,14 +36,24 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ResultPersistenceService {
 
     private final OrganismResultMapper organismResultMapper;
     private final AstResultMapper astResultMapper;
     private final SampleMapper sampleMapper;
     private final RabbitTemplate rabbitTemplate;
-    private final StringRedisTemplate redisTemplate;
+    @Autowired(required = false)
+    private StringRedisTemplate redisTemplate;
+
+    public ResultPersistenceService(OrganismResultMapper organismResultMapper,
+                                     AstResultMapper astResultMapper,
+                                     SampleMapper sampleMapper,
+                                     RabbitTemplate rabbitTemplate) {
+        this.organismResultMapper = organismResultMapper;
+        this.astResultMapper = astResultMapper;
+        this.sampleMapper = sampleMapper;
+        this.rabbitTemplate = rabbitTemplate;
+    }
 
     private static final String OUTBOX_KEY = "myla:outbox:workflow";
 
@@ -128,6 +138,7 @@ public class ResultPersistenceService {
     }
 
     private void markForRetry(Long orgResultId) {
+        if (redisTemplate == null) return;
         try {
             redisTemplate.opsForSet().add(OUTBOX_KEY, orgResultId.toString());
         } catch (Exception e) {
@@ -144,8 +155,14 @@ public class ResultPersistenceService {
     public void retryOutboxMessages() {
         // 分布式锁：多实例部署时只有一个执行
         String lockKey = "myla:lock:outbox-retry";
-        Boolean locked = redisTemplate.opsForValue()
-                .setIfAbsent(lockKey, "1", java.time.Duration.ofSeconds(25));
+        Boolean locked;
+        try {
+            locked = redisTemplate.opsForValue()
+                    .setIfAbsent(lockKey, "1", java.time.Duration.ofSeconds(25));
+        } catch (Exception e) {
+            log.debug("[OUTBOX] Redis unavailable, skipping outbox retry");
+            return;
+        }
         if (locked == null || !locked) return;
 
         try {

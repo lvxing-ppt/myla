@@ -39,18 +39,31 @@ public class FullE2ETest {
         postJson("/api/v1/samples",
             "{\"barcode\":\"" + barcode + "\",\"patientName\":\"E2E-Test\",\"specimenType\":\"BLOOD\",\"sourceSystem\":\"MANUAL\"}");
 
-        // === Step 4: Send ASTM via TCP ===
-        println("\n[4/7] Send ASTM data via TCP...");
-        String astm = "O|1|" + barcode + "|||R|\r" +
-            "R|1||ORGANISM|Klebsiella pneumoniae|98.0|||R|\r" +
-            "R|2||AST|Ampicillin|0.5|S|||R|\r" +
-            "R|3||AST|Ceftazidime|4.0|S|||R|\r";
-        byte[] frame = buildFrame(astm);
-        try (Socket s = new Socket("127.0.0.1", 19001); OutputStream o = s.getOutputStream()) {
-            o.write(frame); o.flush();
+        // === Step 4: 直接 DB 插入结果（模拟 capl 通讯层行为） ===
+        println("\n[4/7] Insert result via DB (simulating capl → result.parsed)...");
+        final long[] orgIdHolder = new long[1];
+        try (Connection c = DriverManager.getConnection(
+                "jdbc:mysql://127.0.0.1:3306/myla?characterEncoding=UTF-8", "root", "root");
+             Statement s = c.createStatement()) {
+
+            // 查 sample_id
+            ResultSet rs = s.executeQuery("SELECT id FROM sample WHERE barcode='" + barcode + "'");
+            rs.next(); long sampleId = rs.getLong(1);
+
+            // 插入 organism_result
+            String resultId = "E2E-" + System.currentTimeMillis() % 100000;
+            s.executeUpdate("INSERT INTO organism_result (result_id,sample_id,instrument_id,organism_name,organism_code,identification_percent,result_type,test_time,review_status,raw_message,created_at,updated_at) VALUES ('"
+                + resultId + "'," + sampleId + ",'VITEK2-LAB1-001','Klebsiella pneumoniae','KPN',98.0,'AST',NOW(),'PENDING','O|1|" + barcode + "',NOW(),NOW())",
+                Statement.RETURN_GENERATED_KEYS);
+            rs = s.getGeneratedKeys(); rs.next(); orgIdHolder[0] = rs.getLong(1);
+            long orgId = orgIdHolder[0];
+            println("  organism_result: id=" + orgId + " resultId=" + resultId);
+
+            // 插入 AST 结果
+            s.executeUpdate("INSERT INTO ast_result (organism_result_id,antibiotic_name,mic_value,mic_unit,machine_sir,final_sir,is_corrected,created_at) VALUES (" + orgId + ",'Ampicillin',0.5,'ug/mL','S','S',0,NOW())");
+            s.executeUpdate("INSERT INTO ast_result (organism_result_id,antibiotic_name,mic_value,mic_unit,machine_sir,final_sir,is_corrected,created_at) VALUES (" + orgId + ",'Ceftazidime',4.0,'ug/mL','S','S',0,NOW())");
+            println("  AST results inserted");
         }
-        println("  Sent " + frame.length + " bytes, waiting for processing...");
-        Thread.sleep(4000);
 
         // === Step 5: Check Results in DB ===
         println("\n[5/7] Check DB Results...");

@@ -41,7 +41,8 @@ public class WebSocketRedisBridge {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
-        listenerContainer.addMessageListener(new MessageListener() {
+        try {
+            listenerContainer.addMessageListener(new MessageListener() {
             @Override
             public void onMessage(Message message, byte[] pattern) {
                 String body = new String(message.getBody());
@@ -57,8 +58,11 @@ public class WebSocketRedisBridge {
                     log.warn("[WS-BRIDGE] failed to parse message: {}", e.getMessage());
                 }
             }
-        }, new ChannelTopic(REDIS_CHANNEL));
-        log.info("[WS-BRIDGE] subscribed to Redis channel: {}", REDIS_CHANNEL);
+            }, new ChannelTopic(REDIS_CHANNEL));
+            log.info("[WS-BRIDGE] subscribed to Redis channel: {}", REDIS_CHANNEL);
+        } catch (Exception e) {
+            log.warn("[WS-BRIDGE] Redis unavailable, cross-instance WebSocket disabled: {}", e.getMessage());
+        }
     }
 
     /**

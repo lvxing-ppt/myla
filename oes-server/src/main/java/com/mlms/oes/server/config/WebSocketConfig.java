@@ -1,5 +1,7 @@
 package com.mlms.oes.server.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,8 +37,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
     }
 
-    /** Redis Pub/Sub 监听容器 */
+    /** Redis Pub/Sub 监听容器 — 仅在 Redis 可用时创建 */
     @Bean
+    @ConditionalOnBean(RedisConnectionFactory.class)
     public RedisMessageListenerContainer redisMessageListenerContainer(
             RedisConnectionFactory connectionFactory) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
@@ -44,8 +47,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         return container;
     }
 
-    /** WebSocket 跨实例 Redis 桥接 */
+    /** WebSocket 跨实例 Redis 桥接 — 仅在 Redis 可用时创建 */
     @Bean
+    @ConditionalOnBean(RedisConnectionFactory.class)
     public WebSocketRedisBridge webSocketRedisBridge(
             SimpMessagingTemplate wsTemplate,
             StringRedisTemplate redisTemplate,
