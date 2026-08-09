@@ -3,6 +3,10 @@ spring:
     active: dev
   application:
     name: oes-platform
+  config:
+    import:
+      - optional:nacos:oes-platform.yml
+      - optional:nacos:oes-platform-${spring.profiles.active}.yml
 
 server:
   port: 8080

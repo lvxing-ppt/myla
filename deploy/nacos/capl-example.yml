@@ -1,0 +1,44 @@
+# Nacos 配置示例 — capl.yml
+# ==============================
+# 在 Nacos 控制台创建以下配置：
+# Data ID: capl.yml  (或 capl-dev.yml 按 profile)
+# Group:   DEFAULT_GROUP
+# 格式:    YAML
+#
+# 配置内容如下，可按需增删仪器。
+
+lis-comm:
+  driver-dir: ./drivers
+
+  instruments:
+    # VITEK 2 微生物鉴定药敏仪
+    - driver-id: vitek2-v1.0
+      instrument-id: VITEK2-LAB1-001
+      channel:
+        type: TCP
+        port: 19001
+      splitter-type: ASTM
+      parser-type: vitek2-parser
+
+    # 新增仪器示例（只需在下面添加即可，无需重启）
+    - driver-id: xxx-v1.0
+      instrument-id: XXX-LAB1-001
+      channel:
+        type: TCP
+        port: 19003
+      splitter-type: ASTM
+      parser-type: xxx-parser
+
+  # LIS 入站：医院 LIS 连接本机的端口
+  lis-inbound:
+    - hospitalCode: DEMO_HOSPITAL
+      port: 2575
+
+  # LIS 出站：本机连接医院 LIS 的通道
+  lis-outbound:
+    - hospitalCode: DEMO_HOSPITAL
+      channelType: HL7
+      channelConfig:
+        host: 10.0.1.5
+        port: 2575
+      ackTimeoutSec: 30

@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: capl
+  config:
+    import:
+      - optional:nacos:capl.yml
+      - optional:nacos:capl-${spring.profiles.active}.yml
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
@@ -15,9 +19,10 @@ spring:
     username: ${RABBITMQ_USER:root}
     password: ${RABBITMQ_PASS:root}
 
-# 通讯层配置
+# 通讯层配置（以下为本地默认值，Nacos 中同名配置会覆盖此处）
 lis-comm:
-  instruments: []
+  driver-dir: ./drivers       # 驱动插件 JAR 目录
+  instruments: []             # 仪器列表 → 生产环境建议在 Nacos 中管理
 
   lis-inbound:
     - hospitalCode: DEMO_HOSPITAL

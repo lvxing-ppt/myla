@@ -2,6 +2,7 @@ package com.mlms.capl.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -9,12 +10,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * LIS 通讯层配置属性（映射 application.yml 中的 lis-comm 段）。
+ * LIS 通讯层配置属性（映射 Nacos 或 application.yml 中的 lis-comm 段）。
+ * <p>
+ * {@link RefreshScope} 确保 Nacos 配置变更时此 Bean 被重新创建，从而拿到最新的仪器列表。
+ * </p>
  */
 @Data
 @Component
+@RefreshScope
 @ConfigurationProperties(prefix = "lis-comm")
 public class LisCommProperties {
+
+    /** 驱动插件目录，默认 "./drivers" */
+    private String driverDir = "./drivers";
 
     /** 仪器列表 */
     private List<InstrumentProps> instruments = new ArrayList<>();
