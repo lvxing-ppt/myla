@@ -138,7 +138,7 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
 
     /** 终态集合（不可再变更） */
     private static final Set<String> TERMINAL_STATUSES = Set.of(
-        "COMPLETED", "REJECTED", "CULTURE_NEGATIVE", "CULTURE_CONTAMINATED");
+        "COMPLETED", "REJECTED", "CULTURE_NEGATIVE", "CULTURE_CONTAMINATED", "CANCELLED");
 
     /** 状态 → 领域事件 */
     private static final Map<String, String> STATUS_EVENT = Map.of(

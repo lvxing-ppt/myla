@@ -5,7 +5,7 @@ USE myla;
 -- ==================== 字典/码表 ====================
 
 CREATE TABLE hospital (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     hospital_code VARCHAR(32) NOT NULL UNIQUE COMMENT '院区代码',
     hospital_name VARCHAR(128) NOT NULL COMMENT '医院名称',
     address VARCHAR(256),
@@ -16,7 +16,7 @@ CREATE TABLE hospital (
 ) ENGINE=InnoDB COMMENT='院区';
 
 CREATE TABLE organism_dict (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     organism_code VARCHAR(16) NOT NULL UNIQUE COMMENT '内部菌种编码',
     organism_name VARCHAR(128) NOT NULL COMMENT '菌种名称',
     whonet_code VARCHAR(16) COMMENT 'WHONET编码',
@@ -29,7 +29,7 @@ CREATE TABLE organism_dict (
 ) ENGINE=InnoDB COMMENT='菌种字典';
 
 CREATE TABLE antibiotic_dict (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     antibiotic_code VARCHAR(16) NOT NULL UNIQUE COMMENT '内部抗生素编码',
     antibiotic_name VARCHAR(64) NOT NULL COMMENT '抗生素名称',
     whonet_code VARCHAR(16) COMMENT 'WHONET编码',
@@ -39,7 +39,7 @@ CREATE TABLE antibiotic_dict (
 ) ENGINE=InnoDB COMMENT='抗生素字典';
 
 CREATE TABLE specimen_dict (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     specimen_code VARCHAR(16) NOT NULL UNIQUE COMMENT '标本类型编码',
     specimen_name VARCHAR(64) NOT NULL COMMENT '标本名称',
     is_sterile_site TINYINT NOT NULL DEFAULT 0 COMMENT '是否无菌部位标本',
@@ -50,7 +50,7 @@ CREATE TABLE specimen_dict (
 -- ==================== 权限/用户 ====================
 
 CREATE TABLE sys_user (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     username VARCHAR(64) NOT NULL UNIQUE,
     password_hash VARCHAR(256) NOT NULL,
     real_name VARCHAR(64),
@@ -65,7 +65,7 @@ CREATE TABLE sys_user (
 ) ENGINE=InnoDB COMMENT='系统用户';
 
 CREATE TABLE sys_role (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     role_code VARCHAR(32) NOT NULL UNIQUE,
     role_name VARCHAR(64) NOT NULL,
     hospital_id BIGINT COMMENT 'NULL表示系统级角色',
@@ -75,7 +75,7 @@ CREATE TABLE sys_role (
 ) ENGINE=InnoDB COMMENT='角色';
 
 CREATE TABLE sys_permission (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     perm_code VARCHAR(64) NOT NULL UNIQUE COMMENT 'result:review, sample:create...',
     perm_name VARCHAR(64) NOT NULL,
     resource VARCHAR(64) COMMENT '资源类型',
@@ -84,14 +84,14 @@ CREATE TABLE sys_permission (
 ) ENGINE=InnoDB COMMENT='权限';
 
 CREATE TABLE sys_user_role (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     role_id BIGINT NOT NULL,
     UNIQUE KEY uk_user_role (user_id, role_id)
 ) ENGINE=InnoDB COMMENT='用户-角色';
 
 CREATE TABLE sys_role_permission (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     role_id BIGINT NOT NULL,
     perm_id BIGINT NOT NULL,
     UNIQUE KEY uk_role_perm (role_id, perm_id)
@@ -100,7 +100,7 @@ CREATE TABLE sys_role_permission (
 -- ==================== 样本 ====================
 
 CREATE TABLE sample (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     sample_id VARCHAR(32) NOT NULL UNIQUE COMMENT '实验室内部编号(yyyyMMdd-xxxx)',
     barcode VARCHAR(64) COMMENT '样本条码',
     patient_id VARCHAR(32) COMMENT '患者ID(来自LIS)',
@@ -129,7 +129,7 @@ CREATE TABLE sample (
 ) ENGINE=InnoDB COMMENT='样本';
 
 CREATE TABLE sample_test (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     sample_id BIGINT NOT NULL COMMENT '关联sample.id',
     test_code VARCHAR(32) COMMENT '检验项目代码',
     test_name VARCHAR(64) COMMENT '检验项目名称',
@@ -143,7 +143,7 @@ CREATE TABLE sample_test (
 ) ENGINE=InnoDB COMMENT='样本检验明细';
 
 CREATE TABLE sample_tracking (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     sample_id BIGINT NOT NULL COMMENT '关联sample.id',
     from_status VARCHAR(20),
     to_status VARCHAR(20) NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE sample_tracking (
 -- ==================== 结果 ====================
 
 CREATE TABLE organism_result (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     result_id VARCHAR(32) NOT NULL UNIQUE COMMENT '结果唯一编号',
     sample_id BIGINT NOT NULL COMMENT '关联sample.id',
     instrument_id VARCHAR(32) COMMENT '检测仪器',
@@ -179,7 +179,7 @@ CREATE TABLE organism_result (
 ) ENGINE=InnoDB COMMENT='菌种鉴定/检测结果';
 
 CREATE TABLE ast_result (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     organism_result_id BIGINT NOT NULL COMMENT '关联organism_result.id',
     antibiotic_code VARCHAR(16) COMMENT '抗生素编码',
     antibiotic_name VARCHAR(64) COMMENT '抗生素名称',
@@ -198,7 +198,7 @@ CREATE TABLE ast_result (
 ) ENGINE=InnoDB COMMENT='药敏结果';
 
 CREATE TABLE raw_message (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     instrument_id VARCHAR(32) NOT NULL COMMENT '仪器编号',
     message_direction VARCHAR(10) NOT NULL COMMENT 'IN/OUT',
     message_type VARCHAR(20) COMMENT 'ASTM/HL7/PROPRIETARY',
@@ -213,7 +213,7 @@ CREATE TABLE raw_message (
 -- ==================== 工作流/危急值 ====================
 
 CREATE TABLE workflow_rule (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     rule_id VARCHAR(32) NOT NULL UNIQUE,
     name VARCHAR(128) NOT NULL COMMENT '规则名称',
     trigger_event VARCHAR(64) NOT NULL COMMENT '触发事件(LabEvent)',
@@ -226,7 +226,7 @@ CREATE TABLE workflow_rule (
 ) ENGINE=InnoDB COMMENT='工作流规则';
 
 CREATE TABLE critical_value_alert (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     organism_result_id BIGINT NOT NULL COMMENT '关联结果',
     organism_name VARCHAR(128) COMMENT '菌种名称',
     alert_reason VARCHAR(64) COMMENT '危急原因',
@@ -245,7 +245,7 @@ CREATE TABLE critical_value_alert (
 -- ==================== LIS通信 ====================
 
 CREATE TABLE lis_config (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     hospital_code VARCHAR(32) NOT NULL COMMENT '院区代码',
     channel_type VARCHAR(32) NOT NULL COMMENT 'HL7/ASTM/HTTP/FILE',
     channel_config JSON COMMENT '通信参数(IP/端口/目录)',
@@ -263,7 +263,7 @@ CREATE TABLE lis_config (
 ) ENGINE=InnoDB COMMENT='LIS配置';
 
 CREATE TABLE outbound_message (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     message_id VARCHAR(64) NOT NULL UNIQUE COMMENT '消息唯一ID',
     hospital_code VARCHAR(32) NOT NULL COMMENT '目标院区',
     message_type VARCHAR(20) NOT NULL COMMENT 'RESULT/ACK/STATUS_QUERY',
@@ -283,7 +283,7 @@ CREATE TABLE outbound_message (
 -- ==================== 报告 ====================
 
 CREATE TABLE report_template (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     template_code VARCHAR(32) NOT NULL UNIQUE,
     template_name VARCHAR(64) NOT NULL COMMENT '报告模板名称',
     template_type VARCHAR(20) NOT NULL COMMENT 'JASPER/EXCEL',
@@ -295,7 +295,7 @@ CREATE TABLE report_template (
 ) ENGINE=InnoDB COMMENT='报告模板';
 
 CREATE TABLE report_schedule (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     schedule_name VARCHAR(64) NOT NULL,
     template_code VARCHAR(32) NOT NULL,
     cron_expr VARCHAR(32) NOT NULL COMMENT 'Quartz cron表达式',
@@ -310,7 +310,7 @@ CREATE TABLE report_schedule (
 -- ==================== 仪器/设备管理 ====================
 
 CREATE TABLE instrument_registry (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     instrument_id VARCHAR(32) NOT NULL UNIQUE COMMENT '系统内唯一编号',
     driver_id VARCHAR(32) NOT NULL COMMENT '关联驱动',
     manufacturer VARCHAR(64),
@@ -327,7 +327,7 @@ CREATE TABLE instrument_registry (
 ) ENGINE=InnoDB COMMENT='仪器注册表';
 
 CREATE TABLE instrument_telemetry (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     instrument_id VARCHAR(32) NOT NULL,
     cpu_temp DECIMAL(5,2),
     ambient_temp DECIMAL(5,2),
@@ -340,7 +340,7 @@ CREATE TABLE instrument_telemetry (
 ) ENGINE=InnoDB COMMENT='仪器遥测';
 
 CREATE TABLE firmware_upgrade_log (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     instrument_id VARCHAR(32) NOT NULL,
     from_version VARCHAR(32),
     to_version VARCHAR(32) NOT NULL,
@@ -355,7 +355,7 @@ CREATE TABLE firmware_upgrade_log (
 -- ==================== 审计 ====================
 
 CREATE TABLE audit_log (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     user_id BIGINT,
     user_name VARCHAR(64),
     action VARCHAR(64) NOT NULL COMMENT 'LOGIN/VIEW/CREATE/EDIT/DELETE/APPROVE/EXPORT',

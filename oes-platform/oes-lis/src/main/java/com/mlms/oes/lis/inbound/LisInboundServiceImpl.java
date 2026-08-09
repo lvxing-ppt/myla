@@ -50,7 +50,7 @@ public class LisInboundServiceImpl implements LisInboundService {
 
     /** 终态集合 — 已结束的样本不再更新患者信息 */
     private static final Set<String> TERMINAL = Set.of(
-            "COMPLETED", "REJECTED", "CULTURE_NEGATIVE", "CULTURE_CONTAMINATED");
+            "COMPLETED", "REJECTED", "CULTURE_NEGATIVE", "CULTURE_CONTAMINATED", "CANCELLED");
 
     @Override
     public Sample receiveOrder(String hospitalCode, byte[] rawMessage, String messageType) {
@@ -78,7 +78,7 @@ public class LisInboundServiceImpl implements LisInboundService {
             if (barcode != null && !barcode.isBlank()) {
                 Sample existing = sampleService.getByBarcodeOrNull(barcode);
                 if (existing != null) {
-                    log.info("Sample already exists for barcode={}, treating as multi-order for same specimen. sampleId={}",
+                    log.info("Sample already exists for barcode={}, multi-order for same specimen. sampleId={}",
                             barcode, existing.getSampleId());
                     return existing;
                 }

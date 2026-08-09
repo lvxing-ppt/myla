@@ -187,7 +187,36 @@ public class ResultPersistenceService {
         if (barcode == null || barcode.isBlank()) return null;
         Sample sample = sampleMapper.selectOne(
             new LambdaQueryWrapper<Sample>().eq(Sample::getBarcode, barcode));
-        return sample != null ? sample.getId() : null;
+        if (sample == null) return null;
+
+        // 检查是否已有检验结果（重新上机场景：旧样本作废，创建新样本）
+        Long resultCount = organismResultMapper.selectCount(
+            new LambdaQueryWrapper<OrganismResult>().eq(OrganismResult::getSampleId, sample.getId()));
+        if (resultCount > 0) {
+            // 旧样本已有结果 → 作废旧样本，创建新样本（重新上机）
+            sample.setStatus("CANCELLED");
+            sampleMapper.updateById(sample);
+            log.info("[RETEST] Old sample {} cancelled, creating new sample for barcode={}",
+                    sample.getSampleId(), barcode);
+
+            Sample newSample = new Sample();
+            newSample.setBarcode(barcode);
+            newSample.setPatientId(sample.getPatientId());
+            newSample.setPatientName(sample.getPatientName());
+            newSample.setGender(sample.getGender());
+            newSample.setAge(sample.getAge());
+            newSample.setSpecimenType(sample.getSpecimenType());
+            newSample.setSourceSystem("RETEST");
+            newSample.setStatus("ORDER_RECEIVED");
+            newSample.setPriority(sample.getPriority());
+            newSample.setWardCode(sample.getWardCode());
+            newSample.setWardName(sample.getWardName());
+            newSample.setDiagnosis(sample.getDiagnosis());
+            sampleMapper.insert(newSample);
+            log.info("[RETEST] New sample created: sampleId={}, barcode={}", newSample.getSampleId(), barcode);
+            return newSample.getId();
+        }
+        return sample.getId();
     }
 
     private static String truncate(String s, int maxLen) {

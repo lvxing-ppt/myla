@@ -1,7 +1,7 @@
 -- ==================== V3: LIS 入站原始报文存档 ====================
 
 CREATE TABLE lis_inbound_message (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     hospital_code VARCHAR(32) NOT NULL COMMENT '医院编码',
     message_type VARCHAR(30) COMMENT '消息类型: ORM^O01 / ADT^A04',
     message_control_id VARCHAR(64) COMMENT 'HL7 MSH-10 消息控制ID',
