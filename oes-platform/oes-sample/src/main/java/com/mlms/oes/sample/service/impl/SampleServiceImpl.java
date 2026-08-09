@@ -7,6 +7,8 @@ import com.mlms.oes.common.api.event.LabEvent;
 import com.mlms.oes.common.core.exception.BusinessException;
 import com.mlms.oes.common.core.constant.ResultCode;
 import com.mlms.oes.sample.entity.Sample;
+import com.mlms.oes.sample.entity.SampleBarcode;
+import com.mlms.oes.sample.mapper.SampleBarcodeMapper;
 import com.mlms.oes.sample.mapper.SampleMapper;
 import com.mlms.oes.sample.service.SampleService;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +56,7 @@ import java.time.format.DateTimeFormatter;
 public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> implements SampleService {
 
     private final SampleMapper sampleMapper;
+    private final SampleBarcodeMapper barcodeMapper;
     private final JdbcTemplate jdbcTemplate;
     private final RabbitTemplate rabbitTemplate;
 
@@ -69,10 +72,12 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
     @Override
     @Transactional
     public Sample register(Sample sample) {
-        // Check duplicate barcode
-        Long count = lambdaQuery().eq(Sample::getBarcode, sample.getBarcode()).count();
-        if (count > 0) {
-            throw new BusinessException(ResultCode.DUPLICATE_BARCODE);
+        // Check duplicate barcode (via sample_barcode table)
+        String barcode = sample.getBarcode();
+        if (barcode != null && !barcode.isBlank()) {
+            Long count = barcodeMapper.selectCount(
+                new LambdaQueryWrapper<SampleBarcode>().eq(SampleBarcode::getBarcode, barcode));
+            if (count > 0) throw new BusinessException(ResultCode.DUPLICATE_BARCODE);
         }
 
         // Generate sample_id: yyyyMMdd-xxxx
@@ -83,13 +88,23 @@ public class SampleServiceImpl extends ServiceImpl<SampleMapper, Sample> impleme
 
         save(sample);
 
+        // Insert sample_barcode
+        if (barcode != null && !barcode.isBlank()) {
+            SampleBarcode sb = new SampleBarcode();
+            sb.setSampleId(sample.getId());
+            sb.setBarcode(barcode);
+            sb.setSource("LIS");
+            sb.setIsPrimary(1);
+            barcodeMapper.insert(sb);
+        }
+
         jdbcTemplate.update(
             "INSERT INTO sample_tracking (sample_id, to_status, operator, comment, created_at) VALUES (?,?,?,?,?)",
             sample.getId(), "ORDER_RECEIVED", "SYSTEM", "Order received from LIS", LocalDateTime.now());
 
         // Publish event
         rabbitTemplate.convertAndSend("myla.workflow", "lab.event", LabEvent.SAMPLE_REGISTERED);
-        log.info("Sample registered: sampleId={}, barcode={}", sample.getSampleId(), sample.getBarcode());
+        log.info("Sample registered: sampleId={}, barcode={}", sample.getSampleId(), barcode);
 
         return sample;
     }
